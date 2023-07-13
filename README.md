@@ -10,7 +10,7 @@ The zip contains the following:
 
 To use this tool, do the following.
 1. Move the unzipped folder to a safe location. You can move the folder to Documents for example.
-2. The dist folder contains an executable (ap_xml_gen.exe) that runs the app. You can make a shortcut to the executable and move the shortcut somewhere with easy access (e.g. Desktop).
+2. The dist folder contains an executable (sap_xml_generator.exe) that runs the app. You can make a shortcut to the executable and move the shortcut somewhere with easy access (e.g. Desktop).
 3. Run the sap_xml_gen.exe file, or run the shortcut if you have made one.
 4. The app will ask to select the pre-filled CALC-XX-XX-SAP CALC TEMPLATE.xlsx.
 5. Finally, the app will ask to select an export folder.
