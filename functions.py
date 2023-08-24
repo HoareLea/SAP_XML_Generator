@@ -66,8 +66,9 @@ def input_reader(sheet):
     unit['shelteredWallUvalue'] = sheet['Sheltered wall U-value'].tolist()[1:]
     unit['shelterFactor'] = sheet['Shelter factor'].tolist()[1:]
     unit['partylWallArea'] = sheet['Party wall area'].tolist()[1:]
-    unit['roofArea'] = sheet['Roof area'].tolist()[1:]
-    unit['roofUvalue'] = sheet['Roof U-value'].tolist()[1:]
+    unit['externalRoofArea'] = sheet['External roof area'].tolist()[1:]
+    unit['externalRoofUvalue'] = sheet['External roof U-value'].tolist()[1:]
+    unit['externalRoofType'] = sheet['External roof type'].tolist()[1:]
     unit['partyRoofArea'] = sheet['Party roof area'].tolist()[1:]
     unit['heatLossFloorArea'] = sheet['Heat loss floor area'].tolist()[1:]
     unit['heatLossFloorUvalue'] = sheet['Heat loss floor U-value'].tolist()[1:]
@@ -202,7 +203,7 @@ def match_xml(input_unit):
             ext_roof['Construction'] = 'Other'
             ext_roof['Kappa'] = 0
             ext_roof['GrossArea'] = input_unit['externalRoofArea'][id]
-            ext_roof['Type'] = input_unit['roofType'][id]
+            ext_roof['Type'] = input_unit['externalRoofType'][id]
             ext_roof['Uvalue'] = input_unit['externalRoofUvalue'][id]
             ext_roof['ShelterFactor'] = 0
             ext_roof['ShelterCode'] = None
