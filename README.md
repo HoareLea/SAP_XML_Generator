@@ -1,7 +1,7 @@
 # SAP XML Generator
 A simple application that can generate an XML input for Elmhurst Design SAP 10 from a standardised Excel sheet.
 
-Download from [here](https://github.com/HoareLea/SAP_XML_Generator/releases/tag/v0.1). Once donwloaded, unzip the folder.
+Download from [here](https://github.com/HoareLea/SAP_XML_Generator/releases/tag/v0.2). Once donwloaded, unzip the folder.
 
 The zip contains the following:
 - build
