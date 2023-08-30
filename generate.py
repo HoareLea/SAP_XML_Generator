@@ -14,7 +14,7 @@ class SAP:
         self.output_data = match_xml(self.input_unit)
         if self.output_data:
             self.writer = self.writer()
-        else: 
+        else:
             raise Exception('No output data')
     
     def writer(self):

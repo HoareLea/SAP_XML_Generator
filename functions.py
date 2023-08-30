@@ -3,6 +3,7 @@ from xml.dom import minidom
 from TBs import TBs
 from levels_naming import levels_naming
 import math
+import pandas as pd
 
 def data_to_xml(dictionary, root_name='AssessmentFull'):
     root = ET.Element(root_name)
@@ -64,17 +65,18 @@ def input_reader(sheet):
     unit['externalWallUvalue'] = sheet['External wall U-value'].tolist()[1:]
     unit['shelteredWallArea'] = sheet['Sheltered wall area'].tolist()[1:]
     unit['shelteredWallUvalue'] = sheet['Sheltered wall U-value'].tolist()[1:]
-    unit['shelterFactor'] = sheet['Shelter factor'].tolist()[1:]
+    unit['shelterFactor'] = sheet['Sheltered wall shelter factor'].tolist()[1:]
     unit['partylWallArea'] = sheet['Party wall area'].tolist()[1:]
     unit['externalRoofArea'] = sheet['External roof area'].tolist()[1:]
     unit['externalRoofUvalue'] = sheet['External roof U-value'].tolist()[1:]
     unit['externalRoofType'] = sheet['External roof type'].tolist()[1:]
-    unit['partyRoofArea'] = sheet['Party roof area'].tolist()[1:]
+    unit['externalRoofShelterFactor'] = sheet['External roof shelter factor'].tolist()[1:]
     unit['heatLossFloorArea'] = sheet['Heat loss floor area'].tolist()[1:]
     unit['heatLossFloorUvalue'] = sheet['Heat loss floor U-value'].tolist()[1:]
+    unit['heatLossFloorType'] = sheet['Heat loss floor type'].tolist()[1:]
+    unit['heatLossFloorShelterFactor'] = sheet['Heat loss floor shelter factor'].tolist()[1:]
+    unit['partyCeilingArea'] = sheet['Party ceiling area'].tolist()[1:]
     unit['partyFloorArea'] = sheet['Party floor area'].tolist()[1:]
-    unit['groundContArea'] = sheet['Ground-contact floor area'].tolist()[1:]
-    unit['groundContUvalue'] = sheet['Ground-contact floor U-value'].tolist()[1:]
 
     #Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
@@ -156,89 +158,118 @@ def match_xml(input_unit):
     heatloss_floors = assessment['HeatlossFloors'] = {}
     party_floors = assessment['PartyFloors'] = {}
     assessment['InternalFloors'] = []
+    op_elements = ['opaqElementType', "externalWallArea","externalWallUvalue","shelteredWallArea",
+                   "shelteredWallUvalue","shelterFactor","partylWallArea","externalRoofArea","externalRoofUvalue",
+                   "externalRoofType","externalRoofShelterFactor","heatLossFloorArea","heatLossFloorUvalue",
+                   "heatLossFloorType","heatLossFloorShelterFactor","partyCeilingArea","partyFloorArea"]
+    op_elements_dict = {col: input_unit[col] for col in op_elements}
+    op_elements_df = pd.DataFrame.from_dict(op_elements_dict)
     for id, type in enumerate(input_unit['opaqElementType']):
+        row = op_elements_df.loc[id]
+        # print(row)
         if type == 'External wall':
-            ext_wall = {}
-            ext_wall['Description'] = input_unit['opaqElementName'][id]
-            ext_wall['Construction'] = 'Other'
-            ext_wall['Kappa'] = 0
-            ext_wall['GrossArea'] = input_unit['externalWallArea'][id]
-            ext_wall['Uvalue'] = input_unit['externalWallUvalue'][id]
-            ext_wall['ShelterFactor'] = 0
-            ext_wall['ShelterCode'] = None
-            ext_wall['Type'] = 'Cavity'
-            ext_wall['AreaCalculationType'] = 'Gross'
-            ext_wall['OpeningsArea'] = 'replace_xsi:nul'
-            ext_wall['NettArea'] = 0
-            ext_walls['ExternalWall{}'.format(id)] = ext_wall
+            if row[1]>0 and row[2]>0:
+                ext_wall = {}
+                ext_wall['Description'] = input_unit['opaqElementName'][id]
+                ext_wall['Construction'] = 'Other'
+                ext_wall['Kappa'] = 0
+                ext_wall['GrossArea'] = round(input_unit['externalWallArea'][id],3)
+                ext_wall['Uvalue'] = input_unit['externalWallUvalue'][id]
+                ext_wall['ShelterFactor'] = 0
+                ext_wall['ShelterCode'] = None
+                ext_wall['Type'] = 'Cavity'
+                ext_wall['AreaCalculationType'] = 'Gross'
+                ext_wall['OpeningsArea'] = 'replace_xsi:nul'
+                ext_wall['NettArea'] = 0
+                ext_walls['ExternalWall{}'.format(id)] = ext_wall
+            else:
+                raise Exception('An external wall has been entered without corresponding properties')
         elif type == 'Sheltered wall':
-            shelt_wall = {}
-            shelt_wall['Description'] = input_unit['opaqElementName'][id]
-            shelt_wall['Construction'] = 'Other'
-            shelt_wall['Kappa'] = 0
-            shelt_wall['GrossArea'] = input_unit['shelteredWallArea'][id]
-            shelt_wall['Uvalue'] = input_unit['shelteredWallUvalue'][id]
-            shelt_wall['ShelterFactor'] = input_unit['shelterFactor'][id]
-            shelt_wall['ShelterCode'] = None
-            shelt_wall['Type'] = 'Cavity'
-            shelt_wall['AreaCalculationType'] = 'Gross'
-            shelt_wall['OpeningsArea'] = 'replace_xsi:nul'
-            shelt_wall['NettArea'] = 0
-            ext_walls['ExternalWall{}'.format(id)] = shelt_wall
+            if row[3]>0 and row[4]>0 and row[5]>=0:
+                shelt_wall = {}
+                shelt_wall['Description'] = input_unit['opaqElementName'][id]
+                shelt_wall['Construction'] = 'Other'
+                shelt_wall['Kappa'] = 0
+                shelt_wall['GrossArea'] = round(input_unit['shelteredWallArea'][id],3)
+                shelt_wall['Uvalue'] = input_unit['shelteredWallUvalue'][id]
+                shelt_wall['ShelterFactor'] = input_unit['shelterFactor'][id]
+                shelt_wall['ShelterCode'] = None
+                shelt_wall['Type'] = 'Cavity'
+                shelt_wall['AreaCalculationType'] = 'Gross'
+                shelt_wall['OpeningsArea'] = 'replace_xsi:nul'
+                shelt_wall['NettArea'] = 0
+                ext_walls['ExternalWall{}'.format(id)] = shelt_wall
+            else:
+                raise Exception('A sheletered wall has been entered without corresponding properties')
         elif type == 'Party wall':
-            party_wall = {}
-            party_wall['Description'] = input_unit['opaqElementName'][id]
-            party_wall['Construction'] = 'Other'
-            party_wall['Kappa'] = 0
-            party_wall['GrossArea'] = input_unit['partylWallArea'][id]
-            party_wall['Uvalue'] = 0
-            party_wall['ShelterFactor'] = 0
-            party_wall['ShelterCode'] = None
-            party_wall['Type'] = 'FilledWithEdge'
-            party_walls['PartyWall{}'.format(id)] = party_wall
+            if row[6]>0:
+                party_wall = {}
+                party_wall['Description'] = input_unit['opaqElementName'][id]
+                party_wall['Construction'] = 'Other'
+                party_wall['Kappa'] = 0
+                party_wall['GrossArea'] = round(input_unit['partylWallArea'][id],3)
+                party_wall['Uvalue'] = 0
+                party_wall['ShelterFactor'] = 0
+                party_wall['ShelterCode'] = None
+                party_wall['Type'] = 'FilledWithEdge'
+                party_walls['PartyWall{}'.format(id)] = party_wall
+            else:
+                raise Exception('A party wall has been entered without corresponding properties')
         elif type == 'External roof':
-            ext_roof = {}
-            ext_roof['Description'] = input_unit['opaqElementName'][id]
-            ext_roof['StoreyIndex'] = []
-            ext_roof['Construction'] = 'Other'
-            ext_roof['Kappa'] = 0
-            ext_roof['GrossArea'] = input_unit['externalRoofArea'][id]
-            ext_roof['Type'] = input_unit['externalRoofType'][id]
-            ext_roof['Uvalue'] = input_unit['externalRoofUvalue'][id]
-            ext_roof['ShelterFactor'] = 0
-            ext_roof['ShelterCode'] = None
-            ext_roof['AreaCalculationType'] = 'Gross'
-            ext_roof['OpeningsArea'] = []
-            ext_roof['NettArea'] = []
-            ext_roofs['ExternalRoof{}'.format(id)] = ext_roof
+            if row[7]>0 and row[8]>0 and row[9]!='nan' and row[10]>=0:
+                ext_roof = {}
+                ext_roof['Description'] = input_unit['opaqElementName'][id]
+                ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                ext_roof['Construction'] = 'Other'
+                ext_roof['Kappa'] = 0
+                ext_roof['GrossArea'] = input_unit['externalRoofArea'][id]
+                ext_roof['Type'] = input_unit['externalRoofType'][id]
+                ext_roof['UValue'] = input_unit['externalRoofUvalue'][id]
+                ext_roof['ShelterFactor'] = input_unit['externalRoofShelterFactor'][id]
+                ext_roof['ShelterCode'] = None
+                ext_roof['AreaCalculationType'] = 'Gross'
+                ext_roof['OpeningsArea'] = 'replace_xsi:nul'
+                ext_roof['NettArea'] = 0
+                ext_roofs['ExternalRoof{}'.format(id)] = ext_roof
+            else:
+                raise Exception('An external roof has been entered without corresponding properties')
         elif type == 'Heat loss floor':
-            heatloss_floor = {}
-            heatloss_floor['Description'] = input_unit['opaqElementName'][id]
-            heatloss_floor['Construction'] = 'Other'
-            heatloss_floor['Kappa'] = 0
-            heatloss_floor['Area'] = input_unit['heatLossFloorArea'][id]
-            heatloss_floor['StoreyIndex'] = []
-            heatloss_floor['Type'] = 'Cavity'
-            heatloss_floor['Uvalue'] = input_unit['heatLossFloorUvalue'][id]
-            heatloss_floor['ShelterFactor'] = 0
-            heatloss_floor['ShelterCode'] = None
-            heatloss_floors['HeatLossFloor{}'.format(id)] = heatloss_floor
-        elif type == 'Party floor':
-            party_floor = {}
-            party_floor['Description'] = input_unit['opaqElementName'][id]
-            party_floor['Construction'] = 'Other'
-            party_floor['Kappa'] = 0
-            party_floor['Area'] = input_unit['partyFloorArea'][id]
-            party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-            party_floors['Floor{}'.format(id)] = party_floor
+            if row[11]>0 and row[12]>0 and row[13]!='nan' and row[14]>=0:
+                heatloss_floor = {}
+                heatloss_floor['Description'] = input_unit['opaqElementName'][id]
+                heatloss_floor['Construction'] = 'Other'
+                heatloss_floor['Kappa'] = 0
+                heatloss_floor['Area'] = input_unit['heatLossFloorArea'][id]
+                heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                heatloss_floor['Type'] = input_unit['heatLossFloorType'][id]
+                heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][id]
+                heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][id]
+                heatloss_floor['ShelterCode'] = None
+                heatloss_floors['HeatLossFloor{}'.format(id)] = heatloss_floor
+            else:
+                raise Exception('A heat loss floor has been entered without corresponding properties')
         elif type == 'Party ceiling':
-            party_roof = {}
-            party_roof['Description'] = input_unit['opaqElementName'][id]
-            party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-            party_roof['Construction'] = 'Other'
-            party_roof['Kappa'] = 0
-            party_roof['GrossArea'] = input_unit['partyRoofArea'][id]
-            party_roofs['Roof{}'.format(id)] = party_roof
+            if row[15]>0:
+                party_roof = {}
+                party_roof['Description'] = input_unit['opaqElementName'][id]
+                party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                party_roof['Construction'] = 'Other'
+                party_roof['Kappa'] = 0
+                party_roof['GrossArea'] = input_unit['partyCeilingArea'][id]
+                party_roofs['Roof{}'.format(id)] = party_roof
+            else:
+                raise Exception('A party ceiling has been entered without corresponding properties')
+        elif type == 'Party floor':
+            if row[16]>0:
+                party_floor = {}
+                party_floor['Description'] = input_unit['opaqElementName'][id]
+                party_floor['Construction'] = 'Other'
+                party_floor['Kappa'] = 0
+                party_floor['Area'] = input_unit['partyFloorArea'][id]
+                party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                party_floors['Floor{}'.format(id)] = party_floor
+            else:
+                raise Exception('A party floor has been entered without corresponding properties')
     assessment['ThermalBridgesCalculation'] = 'CalculateBridges'
     assessment['ThermalBridgingSpreadsheet'] = 'Summary'
     assessment['ThermalBridgesYvalue'] = 0
@@ -334,6 +365,8 @@ def match_xml(input_unit):
             thermal_bridge['Adjusted'] = psi
             thermal_bridge['Reference'] = []
             thermal_bridges['ThermalBridge{}'.format(tb)] = thermal_bridge
+        elif math.isnan(length) ^ math.isnan(psi):
+            print('Warning: Thermal bridge {} has either a missing length or psi value'.format(tb))
     assessment['MechanicalVentilation'] = {}
     assessment['MechanicalVentilationDecentralised'] = []
     assessment['HeatingsInteraction'] = 'SeparatePartsOfHouse'
@@ -401,7 +434,7 @@ def findAndReplace(file_path, value = 'replace_xsi:nul'):
                 for i in range(10):
                     if text == test_text+str(i):
                         element.tag = test_text
-            for test_text in ['ExternalWall','PartyWall','ExternalRoof','HeatlossFloor','Floor','Roof','OpeningType','Opening']:
+            for test_text in ['ExternalWall','PartyWall','ExternalRoof','HeatLossFloor','Floor','Roof','OpeningType','Opening']:
                 for i in range(20):
                     if text == test_text+str(i):
                         element.tag = test_text
