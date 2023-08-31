@@ -129,8 +129,8 @@ def match_xml(input_unit):
     assessment['Reference'] = input_unit['propertyName']
     assessment['DwellingOrientation'] = input_unit['dwellingOrientation']
     assessment['CalculationType'] = input_unit['calcType']
-    assessment['Tenure'] = 'ND' #input_unit['propertyTenure']
-    assessment['TransactionType'] = str(int(6)) #input_unit['transactionType']
+    assessment['Tenure'] = 'ND'
+    assessment['TransactionType'] = str(int(6))
     assessment['TerrainType'] = input_unit['terrainType']
     assessment['SimpleComplianceScotland'] = 'false'
     assessment['PropertyType1'] = input_unit['propertyType1']
@@ -422,7 +422,25 @@ def match_xml(input_unit):
     
     assessment['MechanicalVentilationDecentralised'] = []
     assessment['HeatingsInteraction'] = 'SeparatePartsOfHouse'
-    assessment['CommunityHeating'] = {}
+    
+    communityHeating = assessment['CommunityHeating'] = {}
+    communityHeating['Type'] = 0
+    communityHeating['DistributionLossSpace'] = 0
+    communityHeating['DistributionLossWater'] = 'replace_xsi:nul'
+    communityHeating['ChargingLinked'] = 'replace_xsi:nul'
+    heatSource = communityHeating['HeatSource'] = {}
+    commHeatSource = heatSource['CommunityHeatSource'] = {}
+    commHeatSource['Source'] = 0
+    commHeatSource['Fraction'] = 0
+    commHeatSource['FuelType'] = 0
+    commHeatSource['OveralEfficiency'] = 0
+    commHeatSource['HeatPowerRatio'] = 'replace_xsi:nul'
+    commHeatSource['ElectricalEfficiency'] = 'replace_xsi:nul'
+    commHeatSource['HeatEfficiency'] = 'replace_xsi:nul'
+    commHeatSource['HeatingUse'] = 0
+    commHeatSource['CHPFuelFactor'] = 'replace_xsi:nul'
+    commHeatSource['EfficiencyType'] = 'replace_xsi:nul'
+    
     assessment['WaterHeatingSystem'] = {}
     assessment['Showers'] = {}
     assessment['WindTurbineType'] = 'None'
@@ -488,6 +506,10 @@ def findAndReplace(file_path, value = 'replace_xsi:nul'):
                         element.tag = test_text
             for test_text in ['ExternalWall','PartyWall','ExternalRoof','HeatLossFloor','Floor','Roof','OpeningType','Opening']:
                 for i in range(20):
+                    if text == test_text+str(i):
+                        element.tag = test_text
+            for test_text in ['CommunityHeatSource']:
+                for i in range(5):
                     if text == test_text+str(i):
                         element.tag = test_text
             for tb,name in TBs.items():
