@@ -100,6 +100,27 @@ def input_reader(sheet):
         thermal_bridge['psi'] = sheet[tb].tolist()[0]
         thermal_bridge['lengths']  = sheet[tb].tolist()[2:]
         thermal_bridges[tb] = thermal_bridge
+    
+    # Ventilation
+    unit['mechVentPresent'] = sheet['Mech vent present'].tolist()[1]
+    unit['ventDataType'] = sheet['Ventilation data type'].tolist()[1]
+    unit['ventType'] = sheet['Mech vent type'].tolist()[1]
+    unit['brandModel'] = sheet['Vent brand model'].tolist()[1]
+    unit['MVHR SFP'] = sheet['MVHR SFP'].tolist()[1]
+    unit['MVHR HR'] = sheet['MVHR HR'].tolist()[1]
+    unit['wetRooms'] = int(sheet['Wet rooms'].tolist()[1])
+    unit['systemLocation'] = sheet['System location'].tolist()[1]
+    unit['ductInstallationSpecs'] = sheet['Duct installation specs'].tolist()[1]
+    unit['ductType'] = sheet['Duct type'].tolist()[1]
+    unit['airPerm'] = sheet['Air permeability @50Pa'].tolist()[1]
+    
+    # Lighting
+    unit['lightingName'] = sheet['Lighting name'].tolist()[1]
+    unit['lightingEfficacy'] = int(sheet['Efficacy'].tolist()[1])
+    unit['lightingPower'] = int(sheet['Power'].tolist()[1])
+    unit['lightingCapacity'] = int(sheet['Capacity'].tolist()[1])
+    unit['lightingCount'] = int(sheet['Count'].tolist()[1])
+    
     return unit
 
 def match_xml(input_unit):
@@ -128,6 +149,7 @@ def match_xml(input_unit):
     assessment['ThermalMassValue'] = input_unit['tmp']
     assessment['LowestFloorHasUnheatedSpace'] = 'replace_xsi:nul'
     assessment['UnheatedFloorArea'] = 'replace_xsi:nul'
+    
     measurements = assessment['Measurements'] = {}
     for msrmt in range(9):
         measurement = {}
@@ -158,6 +180,7 @@ def match_xml(input_unit):
     heatloss_floors = assessment['HeatlossFloors'] = {}
     party_floors = assessment['PartyFloors'] = {}
     assessment['InternalFloors'] = []
+    
     op_elements = ['opaqElementType', "externalWallArea","externalWallUvalue","shelteredWallArea",
                    "shelteredWallUvalue","shelterFactor","partylWallArea","externalRoofArea","externalRoofUvalue",
                    "externalRoofType","externalRoofShelterFactor","heatLossFloorArea","heatLossFloorUvalue",
@@ -270,6 +293,7 @@ def match_xml(input_unit):
                 party_floors['Floor{}'.format(id)] = party_floor
             else:
                 raise Exception('A party floor has been entered without corresponding properties')
+    
     assessment['ThermalBridgesCalculation'] = 'CalculateBridges'
     assessment['ThermalBridgingSpreadsheet'] = 'Summary'
     assessment['ThermalBridgesYvalue'] = 0
@@ -286,7 +310,15 @@ def match_xml(input_unit):
     assessment['FluelessGasFires'] = 0
     assessment['NoFixedLighting'] = 'false'
     assessment['LightingCapacityCalculation'] = 'replace_xsi:nul'
-    assessment['Lightings'] = {}
+    
+    lightings = assessment['Lightings'] = {}
+    lighting = lightings['Lighting'] = {}
+    lighting['Name'] = input_unit['lightingName']
+    lighting['Efficacy'] = input_unit['lightingEfficacy']
+    lighting['Power'] = input_unit['lightingPower']
+    lighting['Capacity'] = input_unit['lightingCapacity']
+    lighting['Count'] = input_unit['lightingCount']
+    
     assessment['ElectricityTariff'] ='Standard'
     assessment['SmartElectricityMeterFitted'] = 'false'
     assessment['SmartGasMeterFitted'] = 'false'
@@ -307,6 +339,7 @@ def match_xml(input_unit):
     assessment['BatteryCapacity'] = 'replace_xsi:nul'
     assessment['PhotovoltaicUnitType'] = None
     assessment['PhotovoltaicUnits'] = []
+    
     assessment['OpeningTypes'] = {}
     opening_types = assessment['OpeningTypes'] = {}
     for id, name in enumerate(input_unit['openTypeName']):
@@ -329,6 +362,7 @@ def match_xml(input_unit):
             opening_type['FrameFactor'] = input_unit['frameFactor'][id]
             opening_type['UValue'] = input_unit['uVal'][id]
             opening_types['OpeningType{}'.format(id)] = opening_type
+   
     openings = assessment['Openings'] = {}
     for id, name in enumerate(input_unit['openName']):
         if input_unit['openArea'][id]>0:
@@ -351,6 +385,7 @@ def match_xml(input_unit):
             opening['AreaRecCalculation'] = []
             opening['RoofLightsPitch'] = 0
             openings['Opening{}'.format(id)] = opening
+    
     thermal_bridges = assessment['ThermalBridges'] = {}
     for tb,name in TBs.items():
         length = input_unit['thermalBridges'][tb]['lengths'][0]
@@ -367,7 +402,24 @@ def match_xml(input_unit):
             thermal_bridges['ThermalBridge{}'.format(tb)] = thermal_bridge
         elif math.isnan(length) ^ math.isnan(psi):
             print('Warning: Thermal bridge {} has either a missing length or psi value'.format(tb))
-    assessment['MechanicalVentilation'] = {}
+
+    if input_unit['mechVentPresent'] == "Yes":
+        mechvent = assessment['MechanicalVentilation'] = {}
+        mechvent['DataType'] = input_unit['ventDataType']
+        mechvent['Type'] = input_unit['ventType']
+        mechvent['PcdfIndex'] = 'replace_xsi:nul'
+        mechvent['PcdfItem'] = 'replace_xsi:nul'
+        mechvent['ManufacturerSFP'] = input_unit['MVHR SFP']
+        mechvent['DuctType'] = input_unit['ductType']
+        mechvent['WetRooms'] = input_unit['wetRooms']
+        mechvent['BrandModel'] = input_unit['brandModel']
+        mechvent['MVHRDuctInsulated'] = 'replace_xsi:nul'
+        mechvent['MVHREfficiency'] = input_unit['MVHR HR'] 
+        mechvent['ApprovedInstallation'] = "false"
+        mechvent['SFPFromInstallerCertificate'] = "false"
+        mechvent['MVHRSystemLocation'] = input_unit['systemLocation']
+        mechvent['DuctInsulationLevel'] = input_unit['ductInstallationSpecs']
+    
     assessment['MechanicalVentilationDecentralised'] = []
     assessment['HeatingsInteraction'] = 'SeparatePartsOfHouse'
     assessment['CommunityHeating'] = {}
