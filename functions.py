@@ -30,12 +30,27 @@ def prettify(elem):
     final = prettified.replace('<?xml version="1.0" ?>\n', '')
     return final
 
-def check_missing_general_data(unit, sheet, property):
-    print(sheet[property].tolist()[1])
-    # if sum(sheet[property].isna())==10:
-    if math.isnan(sheet[property].tolist()[1]):
-        raise Exception(f'Error for {unit["propertyName"]}: {property} has not been entered')
-    unit[property] = sheet[property].tolist()[1]
+def check_missing_data(unit, sheet, inputList):
+    for property in inputList:
+        non_nan = sheet[property][sheet[property].notna()]
+        if len(non_nan)==0:
+            raise Exception(f'Error for {unit["propertyName"]}: "{property}" has not been entered')
+        unit[property] = sheet[property].tolist()[1]
+
+def check_opening_type_data(unit, sheet, main, inputs, type):
+    sheet = sheet[sheet['Type']==type]
+    filtered_main = sheet[main][sheet[main].notna()]
+    for input in inputs:
+        filtered_input = sheet[input][sheet[input].notna()]
+        if len(filtered_input)!=len(filtered_main):
+            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{main}" elements and the corresponding "{input}"')
+
+def check_openings_data(unit, sheet, main, inputs):
+    filtered_main = sheet[main][sheet[main].notna()]
+    for input in inputs:
+        filtered_input = sheet[input][sheet[input].notna()]
+        if len(filtered_input)!=len(filtered_main):
+            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{main}" elements and the corresponding "{input}"')
 
 def input_reader(sheet):
     #instantiate unit dict. this will hold all the inputs from the excel sheet
@@ -43,20 +58,9 @@ def input_reader(sheet):
     
     # General information
     unit['propertyName'] = sheet['Property name'].tolist()[1]
-    check_missing_general_data(unit,sheet,'Dwelling orientation')
-    check_missing_general_data(unit,sheet,'Calculation type')
-    check_missing_general_data(unit,sheet,'Terrain type')
-    check_missing_general_data(unit,sheet,'Property type 1')
-    check_missing_general_data(unit,sheet,'Property type 2')
-    check_missing_general_data(unit,sheet,'Position of flat')
-    check_missing_general_data(unit,sheet,'Which floor')
-    check_missing_general_data(unit,sheet,'Tot no. storeys in block')
-    check_missing_general_data(unit,sheet,'No. storeys')
-    check_missing_general_data(unit,sheet,'Date built')
-    check_missing_general_data(unit,sheet,'Sheltered sides')
-    check_missing_general_data(unit,sheet,'Sunlight/sunshade')
-    check_missing_general_data(unit,sheet,'Thermal mass parameter')
-    check_missing_general_data(unit,sheet,'Living area')
+    genInfo_list = ['Dwelling orientation','Calculation type','Terrain type','Property type 1','Property type 2','Position of flat','Which floor',
+                         'Tot no. storeys in block','No. storeys','Date built','Sheltered sides','Sunlight/sunshade','Thermal mass parameter','Living area']
+    check_missing_data(unit, sheet, genInfo_list)
     
     # Level information
     unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
@@ -84,6 +88,20 @@ def input_reader(sheet):
     unit['partyCeilingArea'] = sheet['Party ceiling area'].tolist()[1:]
     unit['partyFloorArea'] = sheet['Party floor area'].tolist()[1:]
 
+    # check if all element types have a name assigned
+    filtered_op_elem_type = sheet['Element type'][sheet['Element type'].notna()]
+    filtered_op_elem_name = sheet['Element name'][sheet['Element name'].notna()]
+    if len(filtered_op_elem_type)!=len(filtered_op_elem_name):
+        raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "Element type" entries and the assigned "Element name"')
+    
+    # checking if number of area inputs matches the number of entries of element type
+    op_elements = ['External wall','Sheltered wall','Party wall','External roof','Heat loss floor','Party ceiling','Party floor']
+    op_elements_titles = ['External wall length','Sheltered wall length','Party wall length','External roof area','Heat loss floor area','Party ceiling area','Party floor area']
+    for id, element in enumerate(op_elements):
+        filtered_elements = sheet['Element type'][sheet['Element type'] == element]
+        if len(filtered_elements) != len(sheet[op_elements_titles[id]][sheet[op_elements_titles[id]].notna()]):
+            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{element}" entries and their corresponding properties')
+        
     #Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
     unit['openingType'] = sheet['Type'].tolist()[1:]
@@ -92,6 +110,12 @@ def input_reader(sheet):
     unit['gVal'] = sheet['Solar transmittance'].tolist()[1:]
     unit['frameFactor'] = sheet['Frame factor'].tolist()[1:]
 
+    inputs_window = ['Type','U-value','Solar transmittance','Frame factor']
+    inputs_door = ['Type','U-value','Frame factor']
+    main = 'Opening type name'
+    check_opening_type_data(unit, sheet, main, inputs_window, type='Window')
+    check_opening_type_data(unit, sheet, main, inputs_door, type='Door')
+    
     # Openings
     unit['openName'] = sheet['Opening name'].tolist()[1:]
     unit['openType'] = sheet['Opening type'].tolist()[1:]
@@ -99,62 +123,42 @@ def input_reader(sheet):
     unit['openOrientation'] = sheet['Orientation'].tolist()[1:]
     unit['openArea'] = sheet['Area'].tolist()[1:]
 
+    inputs_openings= ['Level ref.','Opening type','Belongs to opaque element','Orientation','Width','Height','Area','Floor to ceiling?']
+    main = 'Opening name'
+    check_openings_data(unit, sheet, main, inputs_openings)
+    
     # Thermal bridges
     thermal_bridges = unit['thermalBridges'] = {}
     for tb, _ in TBs.items():
         thermal_bridge = {}
-        thermal_bridge['psi'] = sheet[tb].tolist()[0]
-        thermal_bridge['lengths']  = sheet[tb].tolist()[2:]
+        if sheet[tb][0] == 'ERROR':
+            raise Exception(f'Error for {unit["propertyName"]}: Psi value not entered for thermal bridge {tb}')
+        thermal_bridge['psi'] = sheet[tb][sheet[tb].notna()].tolist()[0]
+        thermal_bridge['lengths']  = sheet[tb][2:][sheet[tb].notna()].tolist()
         thermal_bridges[tb] = thermal_bridge
     
-    # Ventilation
-    unit['mechVentPresent'] = sheet['Mech vent present'].tolist()[1]
-    unit['ventDataType'] = sheet['Ventilation data type'].tolist()[1]
-    unit['ventType'] = sheet['Mech vent type'].tolist()[1]
-    unit['brandModel'] = sheet['Vent brand model'].tolist()[1]
-    unit['MVHR SFP'] = sheet['MVHR SFP'].tolist()[1]
-    unit['MVHR HR'] = sheet['MVHR HR'].tolist()[1]
-    unit['wetRooms'] = int(sheet['Wet rooms'].tolist()[1])
-    unit['systemLocation'] = sheet['System location'].tolist()[1]
-    unit['ductInsulated'] = sheet['Duct insulation'].tolist()[1]
-    unit['ductInstallationSpecs'] = sheet['Duct installation specs'].tolist()[1]
-    unit['ductType'] = sheet['Duct type'].tolist()[1]
-    unit['airPerm'] = sheet['Air permeability @50Pa'].tolist()[1]
+    # Mechanical ventilation
+    mechVent_list = ['Mech vent present','Ventilation data type','Mech vent type','Vent brand model','MVHR SFP','MVHR HR','Wet rooms','System location',
+                 'Duct insulation','Duct installation specs','Duct type','Air permeability @50Pa']
+    check_missing_data(unit, sheet, mechVent_list)
     
     # Lighting
-    unit['lightingName'] = sheet['Lighting name'].tolist()[1]
-    unit['lightingEfficacy'] = int(sheet['Efficacy'].tolist()[1])
-    unit['lightingPower'] = int(sheet['Power'].tolist()[1])
-    unit['lightingCapacity'] = int(sheet['Capacity'].tolist()[1])
-    unit['lightingCount'] = int(sheet['Count'].tolist()[1])
+    lighting_list = ['Lighting name','Efficacy','Power','Capacity','Count']
+    check_missing_data(unit, sheet, lighting_list)
     
     # Heat networks
-    unit['heatingNetworkType'] = sheet['Heating network type'].tolist()[1]
-    unit['distributionLossSpace'] = sheet['Distribution loss space'].tolist()[1]
-    unit['heatingSource1'] = sheet['Heating source 1 - source'].tolist()[1]
-    unit['fuelType'] = sheet['Fuel type'].tolist()[1]
-    unit['distributionLoss'] = sheet['Distribution loss'].tolist()[1]
-    unit['heatingControls'] = sheet['Heating controls'].tolist()[1]
-    unit['percentageHeat'] = sheet['Percentage of heat'].tolist()[1]
-    unit['overallEfficiency'] = sheet['Overall efficiency'].tolist()[1]
-    unit['heatingUse'] = sheet['Heating use'].tolist()[1]
+    heatNetworks_list = ['Heating network type','Distribution loss space','Heating source 1 - source','Fuel type','Distribution loss','Heating controls',
+                         'Percentage of heat','Overall efficiency','Heating use']
+    check_missing_data(unit, sheet, heatNetworks_list)
     
     # Water heating
-    unit['waterHeating'] = sheet['Water heating'].tolist()[1]
-    unit['coldWaterSource'] = sheet['Cold water source'].tolist()[1]
-    unit['bathCount'] = sheet['Bath count'].tolist()[1]
-    unit['showerType'] = sheet['Shower type'].tolist()[1]
-    unit['showerFlowrate'] = sheet['Shower flowrate'].tolist()[1]
-    unit['storageType'] = sheet['Storage type'].tolist()[1]
+    waterHeating_list = ['Water heating','Cold water source','Bath count','Shower type','Shower flowrate','Storage type']
+    check_missing_data(unit, sheet, waterHeating_list)
     
     # PV
-    unit['PVPresent'] = sheet['PV present?'].tolist()[1]
-    unit['PVType'] = sheet['PV type'].tolist()[1]
-    unit['cellsPeak'] = sheet['Cells peak'].tolist()[1]
-    unit['PVOrientation'] = sheet['PV orientation'].tolist()[1]
-    unit['PVElevation'] = sheet['PV elevation'].tolist()[1]
-    unit['PVOvershading'] = sheet['PV overshading'].tolist()[1]
-    
+    PV_list = ['PV present?','PV type','Cells peak','PV orientation','PV elevation','PV overshading']
+    check_missing_data(unit, sheet, PV_list)
+
     return unit
 
 def match_xml(input_unit):
@@ -198,7 +202,7 @@ def match_xml(input_unit):
     if len(filteredHeatLossPerim) == len(filteredHeatedIntArea) == len(filteredFloorToSlab):
         pass
     else:
-        raise Exception(f'Error for {input_unit["propertyName"]}: One item among [Floor to slab, Heat loss perimeter, Heated internal area] has not been entered')
+        raise Exception(f'Error for {input_unit["propertyName"]}: One or multiple inputs among ["Floor to slab", "Heat loss perimeter", "Heated internal area"] have not been entered')
     
     for msrmt in range(9):
         measurement = {}
@@ -220,7 +224,7 @@ def match_xml(input_unit):
             measurement['StoreyHeight'] = 0
         measurements['Measurement{}'.format(msrmt)]  = measurement
     
-    # output data for opqaue elements
+    # instantiate empty dictionaries for opqaue elements
     ext_walls = assessment['ExternalWalls'] = {}
     party_walls = assessment['PartyWalls'] = {}
     assessment['InternalPartitions'] = []
@@ -237,13 +241,13 @@ def match_xml(input_unit):
                    "heatLossFloorType","heatLossFloorShelterFactor","partyCeilingArea","partyFloorArea"]
     op_elements_dict = {col: input_unit[col] for col in op_elements}
     op_elements_df = pd.DataFrame.from_dict(op_elements_dict)
-    
-    # looping through the opaque elemnts and checking what element type it is. each type has a different outputs
+       
+    # looping through the opaque elements and checking what element type it is. each type has different outputs
     for id, type in enumerate(input_unit['opaqElementType']):
         row = op_elements_df.loc[id]
-        # print(row)
         if type == 'External wall':
-            if row[1]>0 and row[2]>0:
+            filtered_row = row[:2][row[:2].notna()]
+            if len(filtered_row)==2:
                 ext_wall = {}
                 ext_wall['Description'] = input_unit['opaqElementName'][id]
                 ext_wall['Construction'] = 'Other'
@@ -258,9 +262,10 @@ def match_xml(input_unit):
                 ext_wall['NettArea'] = 0
                 ext_walls['ExternalWall{}'.format(id)] = ext_wall
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: An external wall has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: An "External wall" has been entered without corresponding properties')
         elif type == 'Sheltered wall':
-            if row[3]>0 and row[4]>0 and row[5]>=0:
+            filtered_row = row[2:6][row[2:6].notna()]
+            if len(filtered_row)==3:
                 shelt_wall = {}
                 shelt_wall['Description'] = input_unit['opaqElementName'][id]
                 shelt_wall['Construction'] = 'Other'
@@ -275,7 +280,7 @@ def match_xml(input_unit):
                 shelt_wall['NettArea'] = 0
                 ext_walls['ExternalWall{}'.format(id)] = shelt_wall
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: A sheltered wall has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: A "Sheltered wall" has been entered without corresponding properties')
         elif type == 'Party wall':
             if row[6]>0:
                 party_wall = {}
@@ -289,9 +294,10 @@ def match_xml(input_unit):
                 party_wall['Type'] = 'FilledWithEdge'
                 party_walls['PartyWall{}'.format(id)] = party_wall
             else:
-                raise Exception('A party wall has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party wall" has been entered without corresponding properties')
         elif type == 'External roof':
-            if row[7]>0 and row[8]>0 and row[9]!='nan' and row[10]>=0:
+            filtered_row = row[7:11][row[7:11].notna()]
+            if len(filtered_row)==4:
                 ext_roof = {}
                 ext_roof['Description'] = input_unit['opaqElementName'][id]
                 ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
@@ -307,9 +313,10 @@ def match_xml(input_unit):
                 ext_roof['NettArea'] = 0
                 ext_roofs['ExternalRoof{}'.format(id)] = ext_roof
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: An external roof has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: An "External roof" has been entered without corresponding properties')
         elif type == 'Heat loss floor':
-            if row[11]>0 and row[12]>0 and row[13]!='nan' and row[14]>=0:
+            filtered_row = row[11:15][row[11:15].notna()]
+            if len(filtered_row)==4:
                 heatloss_floor = {}
                 heatloss_floor['Description'] = input_unit['opaqElementName'][id]
                 heatloss_floor['Construction'] = 'Other'
@@ -322,7 +329,7 @@ def match_xml(input_unit):
                 heatloss_floor['ShelterCode'] = None
                 heatloss_floors['HeatLossFloor{}'.format(id)] = heatloss_floor
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: A heat loss floor has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: A "Heat loss floor" has been entered without corresponding properties')
         elif type == 'Party ceiling':
             if row[15]>0:
                 party_roof = {}
@@ -333,7 +340,7 @@ def match_xml(input_unit):
                 party_roof['GrossArea'] = input_unit['partyCeilingArea'][id]
                 party_roofs['Roof{}'.format(id)] = party_roof
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: A party ceiling has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party ceiling" has been entered without corresponding properties')
         elif type == 'Party floor':
             if row[16]>0:
                 party_floor = {}
@@ -344,7 +351,7 @@ def match_xml(input_unit):
                 party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
                 party_floors['Floor{}'.format(id)] = party_floor
             else:
-                raise Exception(f'Warning for {input_unit["propertyName"]}: A party floor has been entered without corresponding properties')
+                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party floor" has been entered without corresponding properties')
     
     # misc objects that need to be included in the XML for Elmhurst (but currently are not allowed to be entered in the excel sheet)
     assessment['ThermalBridgesCalculation'] = 'CalculateBridges'
@@ -367,11 +374,11 @@ def match_xml(input_unit):
     # output data for lighting
     lightings = assessment['Lightings'] = {}
     lighting = lightings['Lighting'] = {}
-    lighting['Name'] = input_unit['lightingName']
-    lighting['Efficacy'] = input_unit['lightingEfficacy']
-    lighting['Power'] = input_unit['lightingPower']
-    lighting['Capacity'] = input_unit['lightingCapacity']
-    lighting['Count'] = input_unit['lightingCount']
+    lighting['Name'] = input_unit['Lighting name']
+    lighting['Efficacy'] = input_unit['Efficacy']
+    lighting['Power'] = int(input_unit['Power'])
+    lighting['Capacity'] = int(input_unit['Capacity'])
+    lighting['Count'] = int(input_unit['Count'])
     
     # misc objects that need to be included in the XML for Elmhurst (but currently are not allowed to be entered in the excel sheet)
     assessment['ElectricityTariff'] ='Standard'
@@ -380,7 +387,7 @@ def match_xml(input_unit):
     assessment['SolarPanelPresent'] = 'false'
     assessment['PressureTest'] = 'true'
     assessment['PressureTestMethod'] = 'BlowerDoor'
-    assessment['Designed_AP50_AP4'] = input_unit['airPerm']
+    assessment['Designed_AP50_AP4'] = input_unit['Air permeability @50Pa']
     assessment['AsBuilt_AP50_AP4'] = 0
     assessment['PropertyTested'] = 'true'
     assessment['SmokeControlArea'] = 'Unknown'
@@ -394,14 +401,14 @@ def match_xml(input_unit):
     assessment['BatteryCapacity'] = 0
     
     # output data for PV panels. Checks if PVs are present, otherwise retuns empty tag
-    if input_unit['PVPresent'] == 'Yes':
-        assessment['PhotovoltaicUnitType'] = input_unit['PVType']
+    if input_unit['PV present?'] == 'Yes':
+        assessment['PhotovoltaicUnitType'] = input_unit['PV type']
         pvs = assessment['PhotovoltaicUnits'] = {}
         pv = pvs['PhotovoltaicUnit'] = {}
-        pv['CellsPeak'] = input_unit['cellsPeak']
-        pv['Orientation'] = input_unit['PVOrientation']
-        pv['Elevation'] = input_unit['PVElevation']
-        pv['Overshading'] = input_unit['PVOvershading']
+        pv['CellsPeak'] = input_unit['Cells peak']
+        pv['Orientation'] = input_unit['PV orientation']
+        pv['Elevation'] = input_unit['PV elevation']
+        pv['Overshading'] = input_unit['PV overshading']
         pv['Fghrs'] = 'false'
         pv['MCSCertificate'] = 'false'
         pv['OvershadingFactor'] = 0
@@ -463,9 +470,9 @@ def match_xml(input_unit):
     thermal_bridges = assessment['ThermalBridges'] = {}
     # looping through each TB and only including if data is entered
     for tb,name in TBs.items():
-        length = input_unit['thermalBridges'][tb]['lengths'][0]
+        lengths = input_unit['thermalBridges'][tb]['lengths']
         psi = input_unit['thermalBridges'][tb]['psi']
-        if not math.isnan(length) and not math.isnan(psi):
+        for id,length in enumerate(lengths):
             thermal_bridge = {}
             thermal_bridge['TypeSource'] = 'IndependentlyAssessed'
             thermal_bridge['Length'] = length
@@ -474,30 +481,28 @@ def match_xml(input_unit):
             thermal_bridge['Imported'] = 'False'
             thermal_bridge['Adjusted'] = psi
             thermal_bridge['Reference'] = []
-            thermal_bridges['ThermalBridge{}'.format(tb)] = thermal_bridge
-        # elif math.isnan(length) ^ math.isnan(psi):
-        #     print(f'Warning for {input_unit["propertyName"]}: Thermal bridge {tb} has either a missing length or psi value')
+            thermal_bridges[f'ThermalBridge-{tb}-{id}'] = thermal_bridge
 
     # output data for mech vent
-    if input_unit['mechVentPresent'] == "Yes":
+    if input_unit['Mech vent present'] == "Yes":
         mechvent = assessment['MechanicalVentilation'] = {}
-        mechvent['DataType'] = input_unit['ventDataType']
-        mechvent['Type'] = input_unit['ventType']
+        mechvent['DataType'] = input_unit['Ventilation data type']
+        mechvent['Type'] = input_unit['Mech vent type']
         mechvent['PcdfIndex'] = 'replace_xsi:nul'
         mechvent['PcdfItem'] = 'replace_xsi:nul'
         mechvent['ManufacturerSFP'] = input_unit['MVHR SFP']
-        mechvent['DuctType'] = input_unit['ductType']
-        mechvent['WetRooms'] = input_unit['wetRooms']
-        mechvent['BrandModel'] = input_unit['brandModel']
+        mechvent['DuctType'] = input_unit['Duct type']
+        mechvent['WetRooms'] = int(input_unit['Wet rooms'])
+        mechvent['BrandModel'] = input_unit['Vent brand model']
         mechvent['MVHRDuctInsulated'] = 'replace_xsi:nul'
         mechvent['DuctInsulation'] = 'replace_xsi:nul'
         mechvent['MVHREfficiency'] = input_unit['MVHR HR'] 
         mechvent['ApprovedInstallation'] = "false"
         mechvent['SFPFromInstallerCertificate'] = "false"
-        mechvent['MVHRSystemLocation'] = input_unit['systemLocation']
+        mechvent['MVHRSystemLocation'] = input_unit['System location']
         if mechvent['MVHRSystemLocation'] == "Outside":
-            mechvent['MVHRDuctInsulated'] = input_unit['ductInsulated']
-        mechvent['DuctInsulationLevel'] = input_unit['ductInstallationSpecs']
+            mechvent['MVHRDuctInsulated'] = input_unit['Duct insulation']
+        mechvent['DuctInsulationLevel'] = input_unit['Duct installation specs']
     
     assessment['MechanicalVentilationDecentralised'] = []
     assessment['HeatingsInteraction'] = 'SeparatePartsOfHouse'
@@ -533,7 +538,7 @@ def match_xml(input_unit):
         mainHeatingSystem['DelayedStartStat'] = 'false'
         mainHeatingSystem['FlowTemperature'] = 'replace_xsi:nul'
         mainHeatingSystem['BoilerInterlock'] = 'false'
-        mainHeatingSystem['StorageHeaters'] = {    }
+        mainHeatingSystem['StorageHeaters'] = {}
         mainHeatingSystem['FlowTemperatureValue'] = 'replace_xsi:nul'
         mainHeatingSystem['SapCode'] = 'replace_xsi:nul'
         mainHeatingSystem['FuelType'] = 'replace_xsi:nul'
@@ -550,8 +555,8 @@ def match_xml(input_unit):
     
     # output data for community heating
     communityHeating = assessment['CommunityHeating'] = {}
-    communityHeating['Type'] = input_unit['heatingNetworkType']
-    communityHeating['DistributionLossSpace'] = input_unit['distributionLossSpace']
+    communityHeating['Type'] = input_unit['Heating network type']
+    communityHeating['DistributionLossSpace'] = input_unit['Distribution loss space']
     communityHeating['DistributionLossWater'] = 'replace_xsi:nul'
     communityHeating['ChargingLinked'] = 'replace_xsi:nul'
     heatSource = communityHeating['HeatSource'] = {}
@@ -560,14 +565,14 @@ def match_xml(input_unit):
         commHeatSource = heatSource[f'CommunityHeatSource{chs+1}'] = {}
         #only inputting into the first heat source, the rest is kept empty
         if chs == 0:
-            commHeatSource['Source'] = input_unit['heatingSource1']
-            commHeatSource['Fraction'] = input_unit['percentageHeat']
-            commHeatSource['FuelType'] = input_unit['fuelType']
-            commHeatSource['OveralEfficiency'] = input_unit['overallEfficiency']
+            commHeatSource['Source'] = input_unit['Heating source 1 - source']
+            commHeatSource['Fraction'] = input_unit['Percentage of heat']
+            commHeatSource['FuelType'] = input_unit['Fuel type']
+            commHeatSource['OveralEfficiency'] = input_unit['Overall efficiency']
             commHeatSource['HeatPowerRatio'] = 'replace_xsi:nul'
             commHeatSource['ElectricalEfficiency'] = 'replace_xsi:nul'
             commHeatSource['HeatEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatingUse'] = input_unit['heatingUse']
+            commHeatSource['HeatingUse'] = input_unit['Heating use']
             commHeatSource['CHPFuelFactor'] = 'replace_xsi:nul'
             commHeatSource['EfficiencyType'] = 'replace_xsi:nul'
         else:
@@ -578,15 +583,15 @@ def match_xml(input_unit):
             commHeatSource['HeatPowerRatio'] = 'replace_xsi:nul'
             commHeatSource['ElectricalEfficiency'] = 'replace_xsi:nul'
             commHeatSource['HeatEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatingUse'] = input_unit['heatingUse']
+            commHeatSource['HeatingUse'] = input_unit['Heating use']
             commHeatSource['CHPFuelFactor'] = 'replace_xsi:nul'
             commHeatSource['EfficiencyType'] = 'replace_xsi:nul'
             
-    communityHeating['DistributionLossSpaceValue'] = input_unit['distributionLoss']
+    communityHeating['DistributionLossSpaceValue'] = input_unit['Distribution loss']
     communityHeating['DistributionLossWaterValue'] = 'replace_xsi:nul'
     communityHeating['SpacePCDFIndex'] = 'replace_xsi:nul'
     communityHeating['WaterPCDFIndex'] = 'replace_xsi:nul'
-    communityHeating['CtrlSapCode'] = int(input_unit['heatingControls'])
+    communityHeating['CtrlSapCode'] = int(input_unit['Heating controls'])
     communityHeating['ExistingSpace'] = 'replace_xsi:nul'
     communityHeating['ExistingWater'] = 'replace_xsi:nul'
     communityHeating['UseNotionalSpace'] = 'replace_xsi:nul'
@@ -594,7 +599,7 @@ def match_xml(input_unit):
     
     # output data for water heating systems DHW
     waterHeatingSystem = assessment['WaterHeatingSystem'] = {}
-    waterHeatingSystem['WaterHeatingType'] = input_unit['waterHeating']
+    waterHeatingSystem['WaterHeatingType'] = input_unit['Water heating']
     waterHeatingSystem['LowWaterUse'] = 'false'
     waterHeatingSystem['ImmersionHeaterType'] = 'replace_xsi:nul'
     waterHeatingSystem['SummerImmersion'] = 'false'
@@ -602,7 +607,7 @@ def match_xml(input_unit):
     waterHeatingSystem['ImmersionOnlyHeatingHotWater'] = 'false'
     waterHeatingSystem['ThermalStore'] = 'None'
     waterHeatingSystem['ThermalStorePipework'] = 'replace_xsi:nul'
-    waterHeatingSystem['HotWaterCylinder'] = input_unit['storageType']
+    waterHeatingSystem['HotWaterCylinder'] = input_unit['Storage type']
     waterHeatingSystem['InsulationType'] = 'replace_xsi:nul'
     waterHeatingSystem['InsulationThickness'] = 'replace_xsi:nul'
     waterHeatingSystem['InsulationThicknessType'] = 'replace_xsi:nul'
@@ -631,8 +636,8 @@ def match_xml(input_unit):
     waterHeatingSystem['SolarVolume'] = 'replace_xsi:nul'
     waterHeatingSystem['SolarPumpElectricallyPowered'] = 'false'
     waterHeatingSystem['SolarCombinedCylinder'] = 'false'
-    waterHeatingSystem['ColdWaterSource'] = input_unit['coldWaterSource']
-    waterHeatingSystem['BathCount'] = int(input_unit['bathCount'])
+    waterHeatingSystem['ColdWaterSource'] = input_unit['Cold water source']
+    waterHeatingSystem['BathCount'] = int(input_unit['Bath count'])
     waterHeatingSystem['WWHRSBathCount'] = 'replace_xsi:nul'
     waterHeatingSystem['SapCode'] = 901
     waterHeatingSystem['FuelType'] = 'replace_xsi:nul'
@@ -642,9 +647,9 @@ def match_xml(input_unit):
     showers = assessment['Showers'] = {}
     shower = showers['Shower'] = {}
     shower['Description'] = 'Shower1'
-    shower['ShowerType'] = input_unit['showerType']
-    shower['FlowRate'] = input_unit['showerFlowrate']
-    shower['RatedPower'] = round(1.1625 * input_unit['showerFlowrate'],1)
+    shower['ShowerType'] = input_unit['Shower type']
+    shower['FlowRate'] = input_unit['Shower flowrate']
+    shower['RatedPower'] = round(1.1625 * input_unit['Shower flowrate'],1)
     shower['Connected'] = 'true'
     shower['ConnectedTo'] = 'Storage'
     
@@ -718,9 +723,9 @@ def findAndReplace(file_path, value = 'replace_xsi:nul'):
                 for i in range(5):
                     if text == test_text+str(i+1):
                         element.tag = test_text
-            for tb,name in TBs.items():
-                if text == 'ThermalBridge'+tb:
-                    element.tag = 'ThermalBridge'
+            check_tb = ['ThermalBridgesCalculation','ThermalBridgesYvalue']
+            if 'ThermalBridge-' in text:
+                element.tag = 'ThermalBridge'
             for child in element:
                 traverse(child)
         traverse(root)
