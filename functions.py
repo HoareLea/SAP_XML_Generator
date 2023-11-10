@@ -52,6 +52,10 @@ def check_openings_data(unit, sheet, main, inputs):
         if len(filtered_input)!=len(filtered_main):
             raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{main}" elements and the corresponding "{input}"')
 
+def check_op_element_names(unit, sheet):
+    if len(set(sheet['Element name'])) != len(sheet['Element name']):
+        raise Exception(f'Error for {unit["propertyName"]}: Two or more opaque element entries have the same name. All elements require a unique name.')
+        
 def input_reader(sheet):
     #instantiate unit dict. this will hold all the inputs from the excel sheet
     unit = {}
@@ -94,6 +98,9 @@ def input_reader(sheet):
     if len(filtered_op_elem_type)!=len(filtered_op_elem_name):
         raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "Element type" entries and the assigned "Element name"')
     
+    # check if opaque elements have unique names assigned
+    check_op_element_names(unit, sheet)
+    
     # checking if number of area inputs matches the number of entries of element type
     op_elements = ['External wall','Sheltered wall','Party wall','External roof','Heat loss floor','Party ceiling','Party floor']
     op_elements_titles = ['External wall length','Sheltered wall length','Party wall length','External roof area','Heat loss floor area','Party ceiling area','Party floor area']
@@ -117,13 +124,15 @@ def input_reader(sheet):
     check_opening_type_data(unit, sheet, main, inputs_door, type='Door')
     
     # Openings
+    # unit['openLevel'] = sheet['Opening level ref.'][sheet['Opening level ref.'].notna()].tolist()
+    unit['openLevel'] = sheet['Opening level ref.'].tolist()[1:]
     unit['openName'] = sheet['Opening name'].tolist()[1:]
     unit['openType'] = sheet['Opening type'].tolist()[1:]
     unit['parentElem'] = sheet['Belongs to opaque element'].tolist()[1:]
     unit['openOrientation'] = sheet['Orientation'].tolist()[1:]
     unit['openArea'] = sheet['Area'].tolist()[1:]
 
-    inputs_openings= ['Level ref.','Opening type','Belongs to opaque element','Orientation','Width','Height','Area','Floor to ceiling?']
+    inputs_openings= ['Opening level ref.','Opening type','Belongs to opaque element','Orientation','Width','Height','Area','Floor to ceiling?']
     main = 'Opening name'
     check_openings_data(unit, sheet, main, inputs_openings)
     
@@ -300,7 +309,10 @@ def match_xml(input_unit):
             if len(filtered_row)==4:
                 ext_roof = {}
                 ext_roof['Description'] = input_unit['opaqElementName'][id]
-                ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                try:
+                    ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                except:
+                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
                 ext_roof['Construction'] = 'Other'
                 ext_roof['Kappa'] = 0
                 ext_roof['GrossArea'] = input_unit['externalRoofArea'][id]
@@ -322,7 +334,10 @@ def match_xml(input_unit):
                 heatloss_floor['Construction'] = 'Other'
                 heatloss_floor['Kappa'] = 0
                 heatloss_floor['Area'] = input_unit['heatLossFloorArea'][id]
-                heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                try:
+                    heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                except:
+                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
                 heatloss_floor['Type'] = input_unit['heatLossFloorType'][id]
                 heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][id]
                 heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][id]
@@ -334,7 +349,10 @@ def match_xml(input_unit):
             if row[15]>0:
                 party_roof = {}
                 party_roof['Description'] = input_unit['opaqElementName'][id]
-                party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                try:
+                    party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                except:
+                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
                 party_roof['Construction'] = 'Other'
                 party_roof['Kappa'] = 0
                 party_roof['GrossArea'] = input_unit['partyCeilingArea'][id]
@@ -348,7 +366,10 @@ def match_xml(input_unit):
                 party_floor['Construction'] = 'Other'
                 party_floor['Kappa'] = 0
                 party_floor['Area'] = input_unit['partyFloorArea'][id]
-                party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                try:
+                    party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
+                except:
+                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
                 party_floors['Floor{}'.format(id)] = party_floor
             else:
                 raise Exception(f'Error for {input_unit["propertyName"]}: A "Party floor" has been entered without corresponding properties')
@@ -444,19 +465,34 @@ def match_xml(input_unit):
     # output data for openings
     openings = assessment['Openings'] = {}
     # looping through each opening and only including if data is entered
-    for id, name in enumerate(input_unit['openName']):
+    for id, name in enumerate(input_unit['openName']): 
+        # write inputs only if area is entered
         if input_unit['openArea'][id]>0:
+            # check for refernece levels that have not been listed in "levels"
+            try:
+                levels_naming[str(int(input_unit['openLevel'][id]-1))]
+            except:
+                raise Exception(f'The level reference entered for opening "{name}" is not listed under "Levels"')
+                        
             opening = {}
             opening['Id'] = id
-            opening['OpeningTypeIndex'] = []
             for ido,type in enumerate(input_unit['openTypeName']):
                 if input_unit['openType'][id] == type:
                     opening['OpeningTypeIndex'] = ido
             opening['Description'] = name
             opening['LocationBuildingPartIndex'] = 0
-            for ido,parent in enumerate(input_unit['opaqElementName']):
+            
+            counter = 0
+            wall_list = []
+            for ido, type in enumerate(input_unit['opaqElementType']):
+                if type == "External wall" or type == "Sheltered wall":
+                    wall_list.append(input_unit['opaqElementName'][ido])
+            for ido,parent in enumerate(wall_list):
                 if input_unit['parentElem'][id] == parent:
                     opening['LocationWallIndex'] = ido
+                    counter+=1
+            if counter == 0:
+                raise Exception(f'The parent element "{input_unit["parentElem"][id]}" referred by the "{name}" opening element does not exist or it is not an External or Sheltered wall')
             opening['LocationRoofIndex'] = 'replace_xsi:nul'
             opening['Orientation'] = input_unit['openOrientation'][id]
             opening['AreaType'] = 'Total'
