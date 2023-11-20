@@ -67,12 +67,16 @@ def input_reader(sheet):
     check_missing_data(unit, sheet, genInfo_list)
     
     # Level information
-    unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
-    unit['heatedIntArea'] = sheet['Heated internal floor area'].tolist()[1:]
-    unit['heatLossPerim'] = sheet['Heat loss perimeter'].tolist()[1:]
+    # unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
+    unit['floorToSlab'] = sheet['Floor to slab'][sheet['Floor to slab'].notna()].tolist()
+    # unit['heatedIntArea'] = sheet['Heated internal floor area'].tolist()[1:]
+    unit['heatedIntArea'] = sheet['Heated internal floor area'][sheet['Heated internal floor area'].notna()].tolist()
+    # unit['heatLossPerim'] = sheet['Heat loss perimeter'].tolist()[1:]
+    unit['heatLossPerim'] = sheet['Heat loss perimeter'][sheet['Heat loss perimeter'].notna()].tolist()
     
     # Opaque elements
     unit['opaqElementLevel'] = sheet['Level of opaque element'].tolist()[1:]
+    # unit['opaqElementLevel'] = sheet['Level of opaque element'][sheet['Level of opaque element'].notna()].tolist() # THIS IS NOT APPLICABLE AT THIS STAGE BECAUSE THE MATCH_XML FUNCTION REQUIRES A DATAFRAME WITH ALL ELEMENT PROPERTIES WITH SAME LENGTH
     unit['opaqElementType'] = sheet['Element type'].tolist()[1:]
     unit['opaqElementName'] = sheet['Element name'].tolist()[1:]
     unit['externalWallArea'] = sheet['External wall area'].tolist()[1:]
@@ -111,6 +115,7 @@ def input_reader(sheet):
         
     #Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
+    # unit['openTypeName'] = sheet['Opening type name'][sheet['Opening type name'].notna()].tolist() # THIS IS NOT APPLICABLE AT THIS STAGE BECAUSE THE MATCH_XML FUNCTION REQUIRES A DATAFRAME WITH ALL OPENING PROPERTIES WITH SAME LENGTH
     unit['openingType'] = sheet['Type'].tolist()[1:]
     unit['glzgType'] = sheet['Glazing type'].tolist()[1:]
     unit['uVal'] = sheet['U-value'].tolist()[1:]
@@ -216,11 +221,16 @@ def match_xml(input_unit):
     for msrmt in range(9):
         measurement = {}
         if msrmt>0:
-            if input_unit['heatLossPerim'][msrmt-1]>0:
+            try:
                 measurement['Storey'] = msrmt
                 measurement['InternalPerimeter'] = input_unit['heatLossPerim'][msrmt-1]
                 measurement['InternalFloorArea'] = input_unit['heatedIntArea'][msrmt-1]
                 measurement['StoreyHeight'] = input_unit['floorToSlab'][msrmt-1]
+            except:
+                measurement['Storey'] = msrmt
+                measurement['InternalPerimeter'] = 0
+                measurement['InternalFloorArea'] = 0
+                measurement['StoreyHeight'] = 0
             else:
                 measurement['Storey'] = msrmt
                 measurement['InternalPerimeter'] = 0
