@@ -373,7 +373,7 @@ def match_xml(input_unit):
 
     # Looping through the opaque elements and checking what element type it is.
     # Each type has different outputs
-    for this_id, this_type in enumerate(input_unit['opaqElementthis_type']):
+    for this_id, this_type in enumerate(input_unit['opaqElementType']):
         row = op_elements_df.loc[this_id]
         if this_type == 'External wall':
             filtered_row = row[:2][row[:2].notna()]
@@ -386,8 +386,8 @@ def match_xml(input_unit):
                 ext_wall['Uvalue'] = input_unit['externalWallUvalue'][this_id]
                 ext_wall['ShelterFactor'] = 0
                 ext_wall['ShelterCode'] = None
-                ext_wall['this_type'] = 'Cavity'
-                ext_wall['AreaCalculationthis_type'] = 'Gross'
+                ext_wall['Type'] = 'Cavity'
+                ext_wall['AreaCalculationType'] = 'Gross'
                 ext_wall['OpeningsArea'] = 'replace_xsi:nul'
                 ext_wall['NettArea'] = 0
                 ext_walls[f'ExternalWall{this_id}'] = ext_wall
@@ -404,8 +404,8 @@ def match_xml(input_unit):
                 shelt_wall['Uvalue'] = input_unit['shelteredWallUvalue'][this_id]
                 shelt_wall['ShelterFactor'] = input_unit['shelterFactor'][this_id]
                 shelt_wall['ShelterCode'] = None
-                shelt_wall['this_type'] = 'Cavity'
-                shelt_wall['AreaCalculationthis_type'] = 'Gross'
+                shelt_wall['Type'] = 'Cavity'
+                shelt_wall['AreaCalculationType'] = 'Gross'
                 shelt_wall['OpeningsArea'] = 'replace_xsi:nul'
                 shelt_wall['NettArea'] = 0
                 ext_walls[f'ExternalWall{this_id}'] = shelt_wall
@@ -421,7 +421,7 @@ def match_xml(input_unit):
                 party_wall['Uvalue'] = 0
                 party_wall['ShelterFactor'] = 0
                 party_wall['ShelterCode'] = None
-                party_wall['this_type'] = 'FilledWithEdge'
+                party_wall['Type'] = 'FilledWithEdge'
                 party_walls[f'PartyWall{this_id}'] = party_wall
             else:
                 raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party wall" has been entered without corresponding properties')
@@ -439,11 +439,11 @@ def match_xml(input_unit):
                 ext_roof['Construction'] = 'Other'
                 ext_roof['Kappa'] = 0
                 ext_roof['GrossArea'] = input_unit['externalRoofArea'][this_id]
-                ext_roof['this_type'] = input_unit['externalRoofthis_type'][this_id]
+                ext_roof['Type'] = input_unit['externalRoofType'][this_id]
                 ext_roof['UValue'] = input_unit['externalRoofUvalue'][this_id]
                 ext_roof['ShelterFactor'] = input_unit['externalRoofShelterFactor'][this_id]
                 ext_roof['ShelterCode'] = None
-                ext_roof['AreaCalculationthis_type'] = 'Gross'
+                ext_roof['AreaCalculationType'] = 'Gross'
                 ext_roof['OpeningsArea'] = 'replace_xsi:nul'
                 ext_roof['NettArea'] = 0
                 ext_roofs[f'ExternalRoof{this_id}'] = ext_roof
@@ -461,7 +461,7 @@ def match_xml(input_unit):
                     heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
                 except Exception as exc:
                     raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
-                heatloss_floor['this_type'] = input_unit['heatLossFloorthis_type'][this_id]
+                heatloss_floor['Type'] = input_unit['heatLossFloorType'][this_id]
                 heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][this_id]
                 heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][this_id]
                 heatloss_floor['ShelterCode'] = None
