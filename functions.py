@@ -321,17 +321,23 @@ def match_xml(input_unit):
     for msrmt in range(9):
         measurement = {}
         if msrmt>0:
-            if input_unit['heatLossPerim'][msrmt-1]>0:
-                measurement['Storey'] = msrmt
-                measurement['InternalPerimeter'] = input_unit['heatLossPerim'][msrmt-1]
-                measurement['InternalFloorArea'] = input_unit['heatedIntArea'][msrmt-1]
-                measurement['StoreyHeight'] = input_unit['floorToSlab'][msrmt-1]
-            else:
+            try:
+                if math.isnan(input_unit['heatLossPerim'][msrmt-1]):
+                    measurement['Storey'] = msrmt
+                    measurement['InternalPerimeter'] = 0
+                    measurement['InternalFloorArea'] = 0
+                    measurement['StoreyHeight'] = 0
+                else:
+                    measurement['Storey'] = msrmt
+                    measurement['InternalPerimeter'] = input_unit['heatLossPerim'][msrmt-1]
+                    measurement['InternalFloorArea'] = input_unit['heatedIntArea'][msrmt-1]
+                    measurement['StoreyHeight'] = input_unit['floorToSlab'][msrmt-1]
+            except:
                 measurement['Storey'] = msrmt
                 measurement['InternalPerimeter'] = 0
                 measurement['InternalFloorArea'] = 0
                 measurement['StoreyHeight'] = 0
-        else: # For some reason, Elmhurst expects an empty Storey 0
+        else: #for some reason, Elmhurst expects an empty Storey 0
             measurement['Storey'] = msrmt
             measurement['InternalPerimeter'] = 0
             measurement['InternalFloorArea'] = 0
