@@ -100,12 +100,16 @@ def input_reader(sheet):
     check_missing_data(unit, sheet, gen_info_list)
 
     # Level information
-    unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
-    unit['heatedIntArea'] = sheet['Heated internal floor area'].tolist()[1:]
-    unit['heatLossPerim'] = sheet['Heat loss perimeter'].tolist()[1:]
-
+    # unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
+    unit['floorToSlab'] = sheet['Floor to slab'][sheet['Floor to slab'].notna()].tolist()
+    # unit['heatedIntArea'] = sheet['Heated internal floor area'].tolist()[1:]
+    unit['heatedIntArea'] = sheet['Heated internal floor area'][sheet['Heated internal floor area'].notna()].tolist()
+    # unit['heatLossPerim'] = sheet['Heat loss perimeter'].tolist()[1:]
+    unit['heatLossPerim'] = sheet['Heat loss perimeter'][sheet['Heat loss perimeter'].notna()].tolist()
+    
     # Opaque elements
     unit['opaqElementLevel'] = sheet['Level of opaque element'].tolist()[1:]
+    # unit['opaqElementLevel'] = sheet['Level of opaque element'][sheet['Level of opaque element'].notna()].tolist() # THIS IS NOT APPLICABLE AT THIS STAGE BECAUSE THE MATCH_XML FUNCTION REQUIRES A DATAFRAME WITH ALL ELEMENT PROPERTIES WITH SAME LENGTH
     unit['opaqElementType'] = sheet['Element type'].tolist()[1:]
     unit['opaqElementName'] = sheet['Element name'].tolist()[1:]
     unit['externalWallArea'] = sheet['External wall area'].tolist()[1:]
@@ -164,6 +168,7 @@ def input_reader(sheet):
 
     # Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
+    # unit['openTypeName'] = sheet['Opening type name'][sheet['Opening type name'].notna()].tolist() # THIS IS NOT APPLICABLE AT THIS STAGE BECAUSE THE MATCH_XML FUNCTION REQUIRES A DATAFRAME WITH ALL OPENING PROPERTIES WITH SAME LENGTH
     unit['openingType'] = sheet['Type'].tolist()[1:]
     unit['glzgType'] = sheet['Glazing type'].tolist()[1:]
     unit['uVal'] = sheet['U-value'].tolist()[1:]
