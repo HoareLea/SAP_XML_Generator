@@ -222,16 +222,17 @@ def match_xml(input_unit):
         measurement = {}
         if msrmt>0:
             try:
-                measurement['Storey'] = msrmt
-                measurement['InternalPerimeter'] = input_unit['heatLossPerim'][msrmt-1]
-                measurement['InternalFloorArea'] = input_unit['heatedIntArea'][msrmt-1]
-                measurement['StoreyHeight'] = input_unit['floorToSlab'][msrmt-1]
+                if math.isnan(input_unit['heatLossPerim'][msrmt-1]):
+                    measurement['Storey'] = msrmt
+                    measurement['InternalPerimeter'] = 0
+                    measurement['InternalFloorArea'] = 0
+                    measurement['StoreyHeight'] = 0
+                else:
+                    measurement['Storey'] = msrmt
+                    measurement['InternalPerimeter'] = input_unit['heatLossPerim'][msrmt-1]
+                    measurement['InternalFloorArea'] = input_unit['heatedIntArea'][msrmt-1]
+                    measurement['StoreyHeight'] = input_unit['floorToSlab'][msrmt-1]
             except:
-                measurement['Storey'] = msrmt
-                measurement['InternalPerimeter'] = 0
-                measurement['InternalFloorArea'] = 0
-                measurement['StoreyHeight'] = 0
-            else:
                 measurement['Storey'] = msrmt
                 measurement['InternalPerimeter'] = 0
                 measurement['InternalFloorArea'] = 0
@@ -241,7 +242,7 @@ def match_xml(input_unit):
             measurement['InternalPerimeter'] = 0
             measurement['InternalFloorArea'] = 0
             measurement['StoreyHeight'] = 0
-        measurements['Measurement{}'.format(msrmt)]  = measurement
+        measurements[f'Measurement{msrmt}']  = measurement
     
     # instantiate empty dictionaries for opqaue elements
     ext_walls = assessment['ExternalWalls'] = {}
