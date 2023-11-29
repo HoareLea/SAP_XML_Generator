@@ -920,4 +920,6 @@ def find_and_replace(file_path, value = 'replace_xsi:nul'):
                 traverse(child)
         traverse(root)
         updated_xml_data = ET.tostring(root, encoding='utf-8', method='xml').decode()
-    return updated_xml_data
+
+    with open(file_path, 'w', encoding="utf-8") as file:
+        file.write(updated_xml_data)
