@@ -6,9 +6,35 @@ import math
 import pandas as pd
 from TBs import TBs
 from levels_naming import levels_naming
+import uuid
+import datetime
+import os
 
 class ErrorFound(Exception):
     """Basic Class to raise exception"""
+    pass
+
+def generate_unique_name(base_name):
+    """Generate a unique name for the temp XML files to be saved locally"""
+    timestamp = datetime.datetime.now()
+    unique_string = str(uuid.uuid4().hex)
+    run_name = f"{base_name}_{str(timestamp).replace(':','-')}_{unique_string}"
+    return run_name
+
+def delete_files_in_directory(directory):
+    """Deleting all temp files"""
+    # Get the list of files in the directory
+    file_list = os.listdir(directory)
+
+    # Iterate over each file and delete it
+    for file_name in file_list:
+        file_path = os.path.join(directory, file_name)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                print(f"Deleted: {file_path}")
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
     pass
 
 def data_to_xml(dictionary, root_name='AssessmentFull'):

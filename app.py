@@ -3,6 +3,7 @@ from io import BytesIO
 import zipfile
 from generate import generate
 import base64
+import datetime
 
 def main():
     st.title("Upload File and Generate XML")
@@ -17,7 +18,8 @@ def main():
                 names,xml_outputs = generate(uploaded_file)
 
             # Create a zip file containing all the XML files
-            zip_filename = "SAP_XMLs.zip"
+            timestamp = datetime.datetime.now()
+            zip_filename = f"{str(timestamp).split('.')[0].replace(':','-')}_SAP_XMLs.zip"
             zip_buffer = BytesIO()
             with zipfile.ZipFile(zip_buffer, 'a', zipfile.ZIP_DEFLATED, False) as zip_file:
                 for i, xml_output in enumerate(xml_outputs):

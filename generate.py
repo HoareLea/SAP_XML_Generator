@@ -2,7 +2,8 @@
 
 import warnings
 import pandas as pd
-from functions import input_reader, match_xml, data_to_xml, prettify, find_and_replace, ErrorFound
+import os
+from functions import input_reader, match_xml, data_to_xml, prettify, find_and_replace, ErrorFound, generate_unique_name, delete_files_in_directory
 
 warnings.simplefilter(action='ignore', category=UserWarning)
 
@@ -15,13 +16,20 @@ class SAP:
         self.output_data = match_xml(self.input_unit)
         if self.output_data:
             self.writer()
+            self.remove_temp_files()
         else:
             raise ErrorFound('No output data')
 
     def writer(self):
         """Writes out the xml data to a file"""
         xml_string = data_to_xml(self.output_data)
-        file_path = f'{self.name}.xml'
+        temp_file_name = generate_unique_name(self.name)
+        
+        self.temp_path = './temp/'
+        if not os.path.exists(self.temp_path):
+            os.makedirs(self.temp_path)
+
+        file_path = f'{self.temp_path}/{temp_file_name}.xml'
         with open(file_path,'w', encoding="utf-8") as f:
             try:
                 f.write(prettify(xml_string))
@@ -30,15 +38,20 @@ class SAP:
                 raise ErrorFound('Invalid XML structure') from exc
         pass
 
+    def remove_temp_files(self):
+        """Removes all temp files"""
+        delete_files_in_directory(self.temp_path)
+        pass
+
 def generate(file):
     excel_path = file
     print('SAP Calc Sheet: '+excel_path.name)
     df = pd.read_excel(excel_path, header=1, sheet_name=None)
-    units_files = []
+    units_xmls = []
     units_names = []
     for this_name, this_sheet in df.items():
         if 'Unit' in this_name:
             sap = SAP(this_sheet,this_name)
-            units_files.append(sap.xml_out)
+            units_xmls.append(sap.xml_out)
             units_names.append(sap.name)
-    return units_names,units_files
+    return units_names,units_xmls
