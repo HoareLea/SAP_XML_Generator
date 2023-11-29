@@ -1,3 +1,5 @@
+"""Has basic naming of the levels"""
+
 levels_naming = {
     '0': 'Ground',
     '1': 'First',

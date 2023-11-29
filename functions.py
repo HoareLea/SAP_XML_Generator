@@ -1,11 +1,18 @@
+"""Holds the main functions to process and outputs the XML file"""
+
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-from TBs import TBs
-from levels_naming import levels_naming
 import math
 import pandas as pd
+from TBs import TBs
+from levels_naming import levels_naming
+
+class ErrorFound(Exception):
+    """Basic Class to raise exception"""
+    pass
 
 def data_to_xml(dictionary, root_name='AssessmentFull'):
+    """Converts the dictionary element to a string suitable for XML"""
     root = ET.Element(root_name)
     def _data_to_xml(element, data):
         if isinstance(data, dict):
@@ -25,47 +32,73 @@ def data_to_xml(dictionary, root_name='AssessmentFull'):
     return ET.tostring(root, encoding='unicode',xml_declaration=None)
 
 def prettify(elem):
+    """Formats the outputs with the releveant XML criteria"""
     reparsed = minidom.parseString(elem)
     prettified = reparsed.toprettyxml(indent="  ")
     final = prettified.replace('<?xml version="1.0" ?>\n', '')
     return final
 
-def check_missing_data(unit, sheet, inputList):
-    for property in inputList:
-        non_nan = sheet[property][sheet[property].notna()]
+def check_missing_data(unit, sheet, input_list):
+    """Checks for any missing data and raises error if there's a mismatch"""
+    for info in input_list:
+        non_nan = sheet[info][sheet[info].notna()]
         if len(non_nan)==0:
-            raise Exception(f'Error for {unit["propertyName"]}: "{property}" has not been entered')
-        unit[property] = sheet[property].tolist()[1]
+            raise ErrorFound(f'Error for {unit["propertyName"]}: "{info}" has not been entered')
+        unit[info] = sheet[info].tolist()[1]
 
-def check_opening_type_data(unit, sheet, main, inputs, type):
-    sheet = sheet[sheet['Type']==type]
+def check_opening_type_data(unit, sheet, main, inputs, this_type):
+    """Counts Openings on input types and raises error if there's a mismatch"""
+    sheet = sheet[sheet['Type']==this_type]
     filtered_main = sheet[main][sheet[main].notna()]
-    for input in inputs:
-        filtered_input = sheet[input][sheet[input].notna()]
+    for data in inputs:
+        filtered_input = sheet[data][sheet[data].notna()]
         if len(filtered_input)!=len(filtered_main):
-            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{main}" elements and the corresponding "{input}"')
+            raise ErrorFound(f'''Error for {unit["propertyName"]}:
+                             There is a mismatch between the number of "{main}" 
+                             elements and the corresponding "{data}"''')
 
 def check_openings_data(unit, sheet, main, inputs):
+    """Counts Openings on input and raises error if there's a mismatch"""
     filtered_main = sheet[main][sheet[main].notna()]
-    for input in inputs:
-        filtered_input = sheet[input][sheet[input].notna()]
+    for data in inputs:
+        filtered_input = sheet[data][sheet[data].notna()]
         if len(filtered_input)!=len(filtered_main):
-            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{main}" elements and the corresponding "{input}"')
+            raise ErrorFound(f'''Error for {unit["propertyName"]}:
+                             There is a mismatch between the number of "{main}" 
+                             elements and the corresponding "{data}"''')
 
 def check_op_element_names(unit, sheet):
+    """Checks Element Names to ensure each is unique"""
     if len(set(sheet['Element name'])) != len(sheet['Element name']):
-        raise Exception(f'Error for {unit["propertyName"]}: Two or more opaque element entries have the same name. All elements require a unique name.')
-        
+        raise ErrorFound(f'''Error for {unit["propertyName"]}:
+                         Two or more opaque element entries have the same name. 
+                         All elements require a unique name.''')
+
 def input_reader(sheet):
-    #instantiate unit dict. this will hold all the inputs from the excel sheet
+    """Takes in the excel sheet to begin transforming into a dictionary"""
+    # Instantiate unit dict. this will hold all the inputs from the excel sheet
     unit = {}
-    
+
     # General information
     unit['propertyName'] = sheet['Property name'].tolist()[1]
-    genInfo_list = ['Dwelling orientation','Calculation type','Terrain type','Property type 1','Property type 2','Position of flat','Which floor',
-                         'Tot no. storeys in block','No. storeys','Date built','Sheltered sides','Sunlight/sunshade','Thermal mass parameter','Living area']
-    check_missing_data(unit, sheet, genInfo_list)
-    
+    gen_info_list = [
+        'Dwelling orientation',
+        'Calculation type',
+        'Terrain type',
+        'Property type 1',
+        'Property type 2',
+        'Position of flat',
+        'Which floor',
+        'Tot no. storeys in block',
+        'No. storeys',
+        'Date built',
+        'Sheltered sides',
+        'Sunlight/sunshade',
+        'Thermal mass parameter',
+        'Living area'
+    ]
+    check_missing_data(unit, sheet, gen_info_list)
+
     # Level information
     # unit['floorToSlab'] = sheet['Floor to slab'].tolist()[1:]
     unit['floorToSlab'] = sheet['Floor to slab'][sheet['Floor to slab'].notna()].tolist()
@@ -96,24 +129,44 @@ def input_reader(sheet):
     unit['partyCeilingArea'] = sheet['Party ceiling area'].tolist()[1:]
     unit['partyFloorArea'] = sheet['Party floor area'].tolist()[1:]
 
-    # check if all element types have a name assigned
+    # Check if all element types have a name assigned
     filtered_op_elem_type = sheet['Element type'][sheet['Element type'].notna()]
     filtered_op_elem_name = sheet['Element name'][sheet['Element name'].notna()]
     if len(filtered_op_elem_type)!=len(filtered_op_elem_name):
-        raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "Element type" entries and the assigned "Element name"')
-    
-    # check if opaque elements have unique names assigned
+        raise ErrorFound(f'''Error for {unit["propertyName"]}:
+                         There is a mismatch between the number of
+                         "Element type" entries and the assigned "Element name"''')
+
+    # Check if opaque elements have unique names assigned
     check_op_element_names(unit, sheet)
-    
-    # checking if number of area inputs matches the number of entries of element type
-    op_elements = ['External wall','Sheltered wall','Party wall','External roof','Heat loss floor','Party ceiling','Party floor']
-    op_elements_titles = ['External wall length','Sheltered wall length','Party wall length','External roof area','Heat loss floor area','Party ceiling area','Party floor area']
-    for id, element in enumerate(op_elements):
+
+    # Checking if number of area inputs matches the number of entries of element type
+    op_elements = [
+        'External wall',
+        'Sheltered wall',
+        'Party wall',
+        'External roof',
+        'Heat loss floor',
+        'Party ceiling',
+        'Party floor'
+    ]
+    op_elements_titles = [
+        'External wall length',
+        'Sheltered wall length',
+        'Party wall length',
+        'External roof area',
+        'Heat loss floor area',
+        'Party ceiling area',
+        'Party floor area'
+    ]
+    for this_id, element in enumerate(op_elements):
         filtered_elements = sheet['Element type'][sheet['Element type'] == element]
-        if len(filtered_elements) != len(sheet[op_elements_titles[id]][sheet[op_elements_titles[id]].notna()]):
-            raise Exception(f'Error for {unit["propertyName"]}: There is a mismatch between the number of "{element}" entries and their corresponding properties')
-        
-    #Opening types
+        if len(filtered_elements) != len(sheet[op_elements_titles[this_id]][sheet[op_elements_titles[this_id]].notna()]):
+            raise ErrorFound(f'''Error for {unit["propertyName"]}:
+                             There is a mismatch between the number of
+                             "{element}" entries and their corresponding properties''')
+
+    # Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
     # unit['openTypeName'] = sheet['Opening type name'][sheet['Opening type name'].notna()].tolist() # THIS IS NOT APPLICABLE AT THIS STAGE BECAUSE THE MATCH_XML FUNCTION REQUIRES A DATAFRAME WITH ALL OPENING PROPERTIES WITH SAME LENGTH
     unit['openingType'] = sheet['Type'].tolist()[1:]
@@ -125,11 +178,10 @@ def input_reader(sheet):
     inputs_window = ['Type','U-value','Solar transmittance','Frame factor']
     inputs_door = ['Type','U-value','Frame factor']
     main = 'Opening type name'
-    check_opening_type_data(unit, sheet, main, inputs_window, type='Window')
-    check_opening_type_data(unit, sheet, main, inputs_door, type='Door')
-    
+    check_opening_type_data(unit, sheet, main, inputs_window, this_type='Window')
+    check_opening_type_data(unit, sheet, main, inputs_door, this_type='Door')
+
     # Openings
-    # unit['openLevel'] = sheet['Opening level ref.'][sheet['Opening level ref.'].notna()].tolist()
     unit['openLevel'] = sheet['Opening level ref.'].tolist()[1:]
     unit['openName'] = sheet['Opening name'].tolist()[1:]
     unit['openType'] = sheet['Opening type'].tolist()[1:]
@@ -137,50 +189,99 @@ def input_reader(sheet):
     unit['openOrientation'] = sheet['Orientation'].tolist()[1:]
     unit['openArea'] = sheet['Area'].tolist()[1:]
 
-    inputs_openings= ['Opening level ref.','Opening type','Belongs to opaque element','Orientation','Width','Height','Area','Floor to ceiling?']
+    inputs_openings= [
+        'Opening level ref.',
+        'Opening type',
+        'Belongs to opaque element',
+        'Orientation',
+        'Width',
+        'Height',
+        'Area',
+        'Floor to ceiling?'
+    ]
     main = 'Opening name'
     check_openings_data(unit, sheet, main, inputs_openings)
-    
+
     # Thermal bridges
     thermal_bridges = unit['thermalBridges'] = {}
     for tb, _ in TBs.items():
         thermal_bridge = {}
         if sheet[tb][0] == 'ERROR':
-            raise Exception(f'Error for {unit["propertyName"]}: Psi value not entered for thermal bridge {tb}')
+            raise ErrorFound(f'Error for {unit["propertyName"]}: Psi value not entered for thermal bridge {tb}')
         thermal_bridge['psi'] = sheet[tb][sheet[tb].notna()].tolist()[0]
         thermal_bridge['lengths']  = sheet[tb][2:][sheet[tb].notna()].tolist()
         thermal_bridges[tb] = thermal_bridge
-    
+
     # Mechanical ventilation
-    mechVent_list = ['Mech vent present','Ventilation data type','Mech vent type','Vent brand model','MVHR SFP','MVHR HR','Wet rooms','System location',
-                 'Duct insulation','Duct installation specs','Duct type','Air permeability @50Pa']
-    check_missing_data(unit, sheet, mechVent_list)
-    
+    mech_vent_list = [
+        'Mech vent present',
+        'Ventilation data type',
+        'Mech vent type',
+        'Vent brand model',
+        'MVHR SFP','MVHR HR',
+        'Wet rooms',
+        'System location',
+        'Duct insulation',
+        'Duct installation specs',
+        'Duct type',
+        'Air permeability @50Pa'
+    ]
+    check_missing_data(unit, sheet, mech_vent_list)
+
     # Lighting
-    lighting_list = ['Lighting name','Efficacy','Power','Capacity','Count']
+    lighting_list = [
+        'Lighting name',
+        'Efficacy',
+        'Power',
+        'Capacity',
+        'Count'
+    ]
     check_missing_data(unit, sheet, lighting_list)
-    
+
     # Heat networks
-    heatNetworks_list = ['Heating network type','Distribution loss space','Heating source 1 - source','Fuel type','Distribution loss','Heating controls',
-                         'Percentage of heat','Overall efficiency','Heating use']
-    check_missing_data(unit, sheet, heatNetworks_list)
-    
+    heat_networks_list = [
+        'Heating network type',
+        'Distribution loss space',
+        'Heating source 1 - source',
+        'Fuel type',
+        'Distribution loss',
+        'Heating controls',
+        'Percentage of heat',
+        'Overall efficiency',
+        'Heating use'
+    ]
+    check_missing_data(unit, sheet, heat_networks_list)
+
     # Water heating
-    waterHeating_list = ['Water heating','Cold water source','Bath count','Shower type','Shower flowrate','Storage type']
-    check_missing_data(unit, sheet, waterHeating_list)
-    
+    water_heating_list = [
+        'Water heating',
+        'Cold water source',
+        'Bath count',
+        'Shower type',
+        'Shower flowrate',
+        'Storage type'
+    ]
+    check_missing_data(unit, sheet, water_heating_list)
+
     # PV
-    PV_list = ['PV present?','PV type','Cells peak','PV orientation','PV elevation','PV overshading']
+    PV_list = [
+        'PV present?',
+        'PV type',
+        'Cells peak',
+        'PV orientation',
+        'PV elevation',
+        'PV overshading'
+    ]
     check_missing_data(unit, sheet, PV_list)
 
     return unit
 
 def match_xml(input_unit):
-    
-    # instantiate output_data dict. this will hold all the output data, arranged as nested dictionaries. the nested dictionrary structure allows for an easier export to XML.
+    """Begins matchings the dict format to a nested dictionaries for easier export to XML"""
+    # Instantiate output_data dict
     output_data = {}
-    
-    # output data for general unit info
+
+    # Output data for general unit info
     assessment = output_data['Assessment'] = {}
     assessment['Reference'] = input_unit['propertyName']
     assessment['DwellingOrientation'] = input_unit['Dwelling orientation']
@@ -205,19 +306,23 @@ def match_xml(input_unit):
     assessment['ThermalMassValue'] = input_unit['Thermal mass parameter']
     assessment['LowestFloorHasUnheatedSpace'] = 'replace_xsi:nul'
     assessment['UnheatedFloorArea'] = 'replace_xsi:nul'
-    
-    # output data for measurements
+
+    # Output data for measurements
     measurements = assessment['Measurements'] = {}
-    # looping through 10 measurements (storeys), as expected by the XML input in Elmhurst. if the storey is not present in the sheet, the output will be just all Os.
-    filteredHeatLossPerim = [x for x in input_unit['heatLossPerim'] if not math.isnan(x)]
-    filteredHeatedIntArea = [x for x in input_unit['heatedIntArea'] if not math.isnan(x)]
-    filteredFloorToSlab = [x for x in input_unit['floorToSlab'] if not math.isnan(x)]
-    
-    if len(filteredHeatLossPerim) == len(filteredHeatedIntArea) == len(filteredFloorToSlab):
+
+    # Looping through 10 measurements (storeys), as expected by the XML input in Elmhurst
+    # If the storey is not present in the sheet, the output will be just all Os.
+    filtered_heat_loss_perim = [x for x in input_unit['heatLossPerim'] if not math.isnan(x)]
+    filtered_heated_int_area = [x for x in input_unit['heatedIntArea'] if not math.isnan(x)]
+    filtered_floor_to_slab = [x for x in input_unit['floorToSlab'] if not math.isnan(x)]
+
+    if len(filtered_heat_loss_perim) == len(filtered_heated_int_area) == len(filtered_floor_to_slab):
         pass
     else:
-        raise Exception(f'Error for {input_unit["propertyName"]}: One or multiple inputs among ["Floor to slab", "Heat loss perimeter", "Heated internal area"] have not been entered')
-    
+        raise ErrorFound(f'''Error for {input_unit["propertyName"]}: 
+                        One or multiple inputs among ["Floor to slab", "Heat loss perimeter", 
+                        "Heated internal area"] have not been entered''')
+
     for msrmt in range(9):
         measurement = {}
         if msrmt>0:
@@ -243,8 +348,8 @@ def match_xml(input_unit):
             measurement['InternalFloorArea'] = 0
             measurement['StoreyHeight'] = 0
         measurements[f'Measurement{msrmt}']  = measurement
-    
-    # instantiate empty dictionaries for opqaue elements
+
+    # Instantiate empty dictionaries for opqaue elements
     ext_walls = assessment['ExternalWalls'] = {}
     party_walls = assessment['PartyWalls'] = {}
     assessment['InternalPartitions'] = []
@@ -254,138 +359,156 @@ def match_xml(input_unit):
     heatloss_floors = assessment['HeatlossFloors'] = {}
     party_floors = assessment['PartyFloors'] = {}
     assessment['InternalFloors'] = []
-    
-    op_elements = ['opaqElementType', "externalWallArea","externalWallUvalue","shelteredWallArea",
-                   "shelteredWallUvalue","shelterFactor","partylWallArea","externalRoofArea","externalRoofUvalue",
-                   "externalRoofType","externalRoofShelterFactor","heatLossFloorArea","heatLossFloorUvalue",
-                   "heatLossFloorType","heatLossFloorShelterFactor","partyCeilingArea","partyFloorArea"]
+
+    op_elements = [
+        'opaqElementType',
+        "externalWallArea",
+        "externalWallUvalue",
+        "shelteredWallArea",
+        "shelteredWallUvalue",
+        "shelterFactor",
+        "partylWallArea",
+        "externalRoofArea",
+        "externalRoofUvalue",
+        "externalRoofType",
+        "externalRoofShelterFactor",
+        "heatLossFloorArea",
+        "heatLossFloorUvalue",
+        "heatLossFloorType",
+        "heatLossFloorShelterFactor",
+        "partyCeilingArea",
+        "partyFloorArea"
+    ]
     op_elements_dict = {col: input_unit[col] for col in op_elements}
     op_elements_df = pd.DataFrame.from_dict(op_elements_dict)
-       
-    # looping through the opaque elements and checking what element type it is. each type has different outputs
-    for id, type in enumerate(input_unit['opaqElementType']):
-        row = op_elements_df.loc[id]
-        if type == 'External wall':
+
+    # Looping through the opaque elements and checking what element type it is.
+    # Each type has different outputs
+    for this_id, this_type in enumerate(input_unit['opaqElementType']):
+        row = op_elements_df.loc[this_id]
+        if this_type == 'External wall':
             filtered_row = row[:2][row[:2].notna()]
             if len(filtered_row)==2:
                 ext_wall = {}
-                ext_wall['Description'] = input_unit['opaqElementName'][id]
+                ext_wall['Description'] = input_unit['opaqElementName'][this_id]
                 ext_wall['Construction'] = 'Other'
                 ext_wall['Kappa'] = 0
-                ext_wall['GrossArea'] = round(input_unit['externalWallArea'][id],3)
-                ext_wall['Uvalue'] = input_unit['externalWallUvalue'][id]
+                ext_wall['GrossArea'] = round(input_unit['externalWallArea'][this_id],3)
+                ext_wall['Uvalue'] = input_unit['externalWallUvalue'][this_id]
                 ext_wall['ShelterFactor'] = 0
                 ext_wall['ShelterCode'] = None
                 ext_wall['Type'] = 'Cavity'
                 ext_wall['AreaCalculationType'] = 'Gross'
                 ext_wall['OpeningsArea'] = 'replace_xsi:nul'
                 ext_wall['NettArea'] = 0
-                ext_walls['ExternalWall{}'.format(id)] = ext_wall
+                ext_walls[f'ExternalWall{this_id}'] = ext_wall
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: An "External wall" has been entered without corresponding properties')
-        elif type == 'Sheltered wall':
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: An "External wall" has been entered without corresponding properties')
+        elif this_type == 'Sheltered wall':
             filtered_row = row[2:6][row[2:6].notna()]
             if len(filtered_row)==3:
                 shelt_wall = {}
-                shelt_wall['Description'] = input_unit['opaqElementName'][id]
+                shelt_wall['Description'] = input_unit['opaqElementName'][this_id]
                 shelt_wall['Construction'] = 'Other'
                 shelt_wall['Kappa'] = 0
-                shelt_wall['GrossArea'] = round(input_unit['shelteredWallArea'][id],3)
-                shelt_wall['Uvalue'] = input_unit['shelteredWallUvalue'][id]
-                shelt_wall['ShelterFactor'] = input_unit['shelterFactor'][id]
+                shelt_wall['GrossArea'] = round(input_unit['shelteredWallArea'][this_id],3)
+                shelt_wall['Uvalue'] = input_unit['shelteredWallUvalue'][this_id]
+                shelt_wall['ShelterFactor'] = input_unit['shelterFactor'][this_id]
                 shelt_wall['ShelterCode'] = None
                 shelt_wall['Type'] = 'Cavity'
                 shelt_wall['AreaCalculationType'] = 'Gross'
                 shelt_wall['OpeningsArea'] = 'replace_xsi:nul'
                 shelt_wall['NettArea'] = 0
-                ext_walls['ExternalWall{}'.format(id)] = shelt_wall
+                ext_walls[f'ExternalWall{this_id}'] = shelt_wall
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: A "Sheltered wall" has been entered without corresponding properties')
-        elif type == 'Party wall':
-            if row[6]>0:
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Sheltered wall" has been entered without corresponding properties')
+        elif this_type == 'Party wall':
+            if row.iloc[6]>0:
                 party_wall = {}
-                party_wall['Description'] = input_unit['opaqElementName'][id]
+                party_wall['Description'] = input_unit['opaqElementName'][this_id]
                 party_wall['Construction'] = 'Other'
                 party_wall['Kappa'] = 0
-                party_wall['GrossArea'] = round(input_unit['partylWallArea'][id],3)
+                party_wall['GrossArea'] = round(input_unit['partylWallArea'][this_id],3)
                 party_wall['Uvalue'] = 0
                 party_wall['ShelterFactor'] = 0
                 party_wall['ShelterCode'] = None
                 party_wall['Type'] = 'FilledWithEdge'
-                party_walls['PartyWall{}'.format(id)] = party_wall
+                party_walls[f'PartyWall{this_id}'] = party_wall
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party wall" has been entered without corresponding properties')
-        elif type == 'External roof':
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party wall" has been entered without corresponding properties')
+
+
+        elif this_type == 'External roof':
             filtered_row = row[7:11][row[7:11].notna()]
             if len(filtered_row)==4:
                 ext_roof = {}
-                ext_roof['Description'] = input_unit['opaqElementName'][id]
+                ext_roof['Description'] = input_unit['opaqElementName'][this_id]
                 try:
-                    ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-                except:
-                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
+                    ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
+                except Exception as exc:
+                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 ext_roof['Construction'] = 'Other'
                 ext_roof['Kappa'] = 0
-                ext_roof['GrossArea'] = input_unit['externalRoofArea'][id]
-                ext_roof['Type'] = input_unit['externalRoofType'][id]
-                ext_roof['UValue'] = input_unit['externalRoofUvalue'][id]
-                ext_roof['ShelterFactor'] = input_unit['externalRoofShelterFactor'][id]
+                ext_roof['GrossArea'] = input_unit['externalRoofArea'][this_id]
+                ext_roof['Type'] = input_unit['externalRoofType'][this_id]
+                ext_roof['UValue'] = input_unit['externalRoofUvalue'][this_id]
+                ext_roof['ShelterFactor'] = input_unit['externalRoofShelterFactor'][this_id]
                 ext_roof['ShelterCode'] = None
                 ext_roof['AreaCalculationType'] = 'Gross'
                 ext_roof['OpeningsArea'] = 'replace_xsi:nul'
                 ext_roof['NettArea'] = 0
-                ext_roofs['ExternalRoof{}'.format(id)] = ext_roof
+                ext_roofs[f'ExternalRoof{this_id}'] = ext_roof
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: An "External roof" has been entered without corresponding properties')
-        elif type == 'Heat loss floor':
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: An "External roof" has been entered without corresponding properties')
+        elif this_type == 'Heat loss floor':
             filtered_row = row[11:15][row[11:15].notna()]
             if len(filtered_row)==4:
                 heatloss_floor = {}
-                heatloss_floor['Description'] = input_unit['opaqElementName'][id]
+                heatloss_floor['Description'] = input_unit['opaqElementName'][this_id]
                 heatloss_floor['Construction'] = 'Other'
                 heatloss_floor['Kappa'] = 0
-                heatloss_floor['Area'] = input_unit['heatLossFloorArea'][id]
+                heatloss_floor['Area'] = input_unit['heatLossFloorArea'][this_id]
                 try:
-                    heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-                except:
-                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
-                heatloss_floor['Type'] = input_unit['heatLossFloorType'][id]
-                heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][id]
-                heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][id]
+                    heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
+                except Exception as exc:
+                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                heatloss_floor['Type'] = input_unit['heatLossFloorType'][this_id]
+                heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][this_id]
+                heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][this_id]
                 heatloss_floor['ShelterCode'] = None
-                heatloss_floors['HeatLossFloor{}'.format(id)] = heatloss_floor
+                heatloss_floors[f'HeatLossFloor{this_id}'] = heatloss_floor
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: A "Heat loss floor" has been entered without corresponding properties')
-        elif type == 'Party ceiling':
-            if row[15]>0:
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Heat loss floor" has been entered without corresponding properties')
+        elif this_type == 'Party ceiling':
+            if row.iloc[15]>0:
                 party_roof = {}
-                party_roof['Description'] = input_unit['opaqElementName'][id]
+                party_roof['Description'] = input_unit['opaqElementName'][this_id]
                 try:
-                    party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-                except:
-                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
+                    party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
+                except Exception as exc:
+                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 party_roof['Construction'] = 'Other'
                 party_roof['Kappa'] = 0
-                party_roof['GrossArea'] = input_unit['partyCeilingArea'][id]
-                party_roofs['Roof{}'.format(id)] = party_roof
+                party_roof['GrossArea'] = input_unit['partyCeilingArea'][this_id]
+                party_roofs[f'Roof{this_id}'] = party_roof
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party ceiling" has been entered without corresponding properties')
-        elif type == 'Party floor':
-            if row[16]>0:
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party ceiling" has been entered without corresponding properties')
+        elif this_type == 'Party floor':
+            if row.iloc[16]>0:
                 party_floor = {}
-                party_floor['Description'] = input_unit['opaqElementName'][id]
+                party_floor['Description'] = input_unit['opaqElementName'][this_id]
                 party_floor['Construction'] = 'Other'
                 party_floor['Kappa'] = 0
-                party_floor['Area'] = input_unit['partyFloorArea'][id]
+                party_floor['Area'] = input_unit['partyFloorArea'][this_id]
                 try:
-                    party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][id]-1))]
-                except:
-                    raise Exception(f'The level reference entered for {type} is not listed under "Levels"')
-                party_floors['Floor{}'.format(id)] = party_floor
+                    party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
+                except Exception as exc:
+                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                party_floors[f'Floor{this_id}'] = party_floor
             else:
-                raise Exception(f'Error for {input_unit["propertyName"]}: A "Party floor" has been entered without corresponding properties')
-    
-    # misc objects that need to be included in the XML for Elmhurst (but currently are not allowed to be entered in the excel sheet)
+                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party floor" has been entered without corresponding properties')
+    # Misc objects that need to be included in the XML for Elmhurst
+    # (but currently are not allowed to be entered in the excel sheet)
     assessment['ThermalBridgesCalculation'] = 'CalculateBridges'
     assessment['ThermalBridgingSpreadsheet'] = 'Summary'
     assessment['ThermalBridgesYvalue'] = 0
@@ -402,8 +525,8 @@ def match_xml(input_unit):
     assessment['FluelessGasFires'] = 0
     assessment['NoFixedLighting'] = 'false'
     assessment['LightingCapacityCalculation'] = 'replace_xsi:nul'
-    
-    # output data for lighting
+
+    # Output data for lighting
     lightings = assessment['Lightings'] = {}
     lighting = lightings['Lighting'] = {}
     lighting['Name'] = input_unit['Lighting name']
@@ -411,8 +534,9 @@ def match_xml(input_unit):
     lighting['Power'] = int(input_unit['Power'])
     lighting['Capacity'] = int(input_unit['Capacity'])
     lighting['Count'] = int(input_unit['Count'])
-    
-    # misc objects that need to be included in the XML for Elmhurst (but currently are not allowed to be entered in the excel sheet)
+
+    # Misc objects that need to be included in the XML for Elmhurst
+    # (but currently are not allowed to be entered in the excel sheet)
     assessment['ElectricityTariff'] ='Standard'
     assessment['SmartElectricityMeterFitted'] = 'false'
     assessment['SmartGasMeterFitted'] = 'false'
@@ -431,8 +555,8 @@ def match_xml(input_unit):
     assessment['ConnectedToDwelling'] = 'Yes'
     assessment['Diverter'] = 'No'
     assessment['BatteryCapacity'] = 0
-    
-    # output data for PV panels. Checks if PVs are present, otherwise retuns empty tag
+
+    # Output data for PV panels. Checks if PVs are present, otherwise retuns empty tag
     if input_unit['PV present?'] == 'Yes':
         assessment['PhotovoltaicUnitType'] = input_unit['PV type']
         pvs = assessment['PhotovoltaicUnits'] = {}
@@ -447,79 +571,84 @@ def match_xml(input_unit):
     else:
         assessment['PhotovoltaicUnitType'] = None
         assessment['PhotovoltaicUnits'] = {}
-    
-    # output data for opening types
+
+    # Output data for opening types
     assessment['OpeningTypes'] = {}
     opening_types = assessment['OpeningTypes'] = {}
-    # looping through each opening type and only including if data is entered
-    for id, name in enumerate(input_unit['openTypeName']):
-        if input_unit['uVal'][id]>0:
+
+    # Looping through each opening type and only including if data is entered
+    for this_id, name in enumerate(input_unit['openTypeName']):
+        if input_unit['uVal'][this_id]>0:
             opening_type = {}
             opening_type['Description'] = name
             opening_type['DataSource'] = 'Manufacturer'
-            opening_type['Type'] = input_unit['openingType'][id]
-            if input_unit['openingType'][id]=='Window':
+            opening_type['Type'] = input_unit['openingType'][this_id]
+            if input_unit['openingType'][this_id]=='Window':
                 opening_type['Glazing'] = 'Double'
                 opening_type['GlazingGap'] = 'replace_xsi:nul'
                 opening_type['GlazingFillingType'] = None
-                opening_type['SolarTrans'] = input_unit['gVal'][id]
+                opening_type['SolarTrans'] = input_unit['gVal'][this_id]
             else:
                 opening_type['Glazing'] = 'replace_xsi:nul'
                 opening_type['GlazingGap'] = 'replace_xsi:nul'
                 opening_type['GlazingFillingType'] = None
                 opening_type['SolarTrans'] = 0
             opening_type['FrameType'] = 'Wood'
-            opening_type['FrameFactor'] = input_unit['frameFactor'][id]
-            opening_type['UValue'] = input_unit['uVal'][id]
-            opening_types['OpeningType{}'.format(id)] = opening_type
-    
-    # output data for openings
+            opening_type['FrameFactor'] = input_unit['frameFactor'][this_id]
+            opening_type['UValue'] = input_unit['uVal'][this_id]
+            opening_types[f'OpeningType{this_id}'] = opening_type
+
+    # Output data for openings
     openings = assessment['Openings'] = {}
-    # looping through each opening and only including if data is entered
-    for id, name in enumerate(input_unit['openName']): 
-        # write inputs only if area is entered
-        if input_unit['openArea'][id]>0:
-            # check for refernece levels that have not been listed in "levels"
+
+    # Looping through each opening and only including if data is entered
+    for this_id, name in enumerate(input_unit['openName']):
+        # Write inputs only if area is entered
+        if input_unit['openArea'][this_id]>0:
+            # Check for refernece levels that have not been listed in "levels"
             try:
-                levels_naming[str(int(input_unit['openLevel'][id]-1))]
-            except:
-                raise Exception(f'The level reference entered for opening "{name}" is not listed under "Levels"')
-                        
+                levels_naming[str(int(input_unit['openLevel'][this_id]-1))]
+            except Exception as exc:
+                raise ErrorFound(f'The level reference entered for opening "{name}" is not listed under "Levels"') from exc
+
             opening = {}
-            opening['Id'] = id
-            for ido,type in enumerate(input_unit['openTypeName']):
-                if input_unit['openType'][id] == type:
-                    opening['OpeningTypeIndex'] = ido
+            opening['this_id'] = this_id
+            for this_ido,this_type in enumerate(input_unit['openTypeName']):
+                if input_unit['openType'][this_id] == this_type:
+                    opening['OpeningTypeIndex'] = this_ido
             opening['Description'] = name
             opening['LocationBuildingPartIndex'] = 0
-            
+
             counter = 0
             wall_list = []
-            for ido, type in enumerate(input_unit['opaqElementType']):
-                if type == "External wall" or type == "Sheltered wall":
-                    wall_list.append(input_unit['opaqElementName'][ido])
-            for ido,parent in enumerate(wall_list):
-                if input_unit['parentElem'][id] == parent:
-                    opening['LocationWallIndex'] = ido
+            for this_ido, this_type in enumerate(input_unit['opaqElementType']):
+                if this_type == "External wall" or this_type == "Sheltered wall":
+                    wall_list.append(input_unit['opaqElementName'][this_ido])
+            for this_ido,parent in enumerate(wall_list):
+                if input_unit['parentElem'][this_id] == parent:
+                    opening['LocationWallIndex'] = this_ido
                     counter+=1
             if counter == 0:
-                raise Exception(f'The parent element "{input_unit["parentElem"][id]}" referred by the "{name}" opening element does not exist or it is not an External or Sheltered wall')
+                raise ErrorFound(f'''The parent element "{input_unit["parentElem"][this_id]}" 
+                                referred by the "{name}" opening element does not exist 
+                                or it is not an External or Sheltered wall''')
             opening['LocationRoofIndex'] = 'replace_xsi:nul'
-            opening['Orientation'] = input_unit['openOrientation'][id]
+            opening['Orientation'] = input_unit['openOrientation'][this_id]
             opening['AreaType'] = 'Total'
             opening['AreaScaleType'] = 'Meters'
-            opening['Area'] = input_unit['openArea'][id]
+            opening['Area'] = input_unit['openArea'][this_id]
             opening['AreaRecCalculation'] = []
             opening['RoofLightsPitch'] = 0
-            openings['Opening{}'.format(id)] = opening
-    
-    # output data for thermal bridges
+            openings[f'Opening{this_id}'] = opening
+
+    # Output data for thermal bridges
     thermal_bridges = assessment['ThermalBridges'] = {}
-    # looping through each TB and only including if data is entered
+
+    # Looping through each TB and only including if data is entered
     for tb,name in TBs.items():
         lengths = input_unit['thermalBridges'][tb]['lengths']
         psi = input_unit['thermalBridges'][tb]['psi']
-        for id,length in enumerate(lengths):
+        for this_id,length in enumerate(lengths):
             thermal_bridge = {}
             thermal_bridge['TypeSource'] = 'IndependentlyAssessed'
             thermal_bridge['Length'] = length
@@ -528,7 +657,7 @@ def match_xml(input_unit):
             thermal_bridge['Imported'] = 'False'
             thermal_bridge['Adjusted'] = psi
             thermal_bridge['Reference'] = []
-            thermal_bridges[f'ThermalBridge-{tb}-{id}'] = thermal_bridge
+            thermal_bridges[f'ThermalBridge-{tb}-{this_id}'] = thermal_bridge
 
     # output data for mech vent
     if input_unit['Mech vent present'] == "Yes":
@@ -543,154 +672,156 @@ def match_xml(input_unit):
         mechvent['BrandModel'] = input_unit['Vent brand model']
         mechvent['MVHRDuctInsulated'] = 'replace_xsi:nul'
         mechvent['DuctInsulation'] = 'replace_xsi:nul'
-        mechvent['MVHREfficiency'] = input_unit['MVHR HR'] 
+        mechvent['MVHREfficiency'] = input_unit['MVHR HR']
         mechvent['ApprovedInstallation'] = "false"
         mechvent['SFPFromInstallerCertificate'] = "false"
         mechvent['MVHRSystemLocation'] = input_unit['System location']
         if mechvent['MVHRSystemLocation'] == "Outside":
             mechvent['MVHRDuctInsulated'] = input_unit['Duct insulation']
         mechvent['DuctInsulationLevel'] = input_unit['Duct installation specs']
-    
+
     assessment['MechanicalVentilationDecentralised'] = []
     assessment['HeatingsInteraction'] = 'SeparatePartsOfHouse'
-    
-    # output data for the main heating systems. these are empty nested items that Elmhurst requires as input
+
+    # Output data for the main heating systems
+    # These are empty nested items that Elmhurst requires as input
     for mhs in range(2):
-        mainHeatingSystem = assessment[f'MainHeatingSystem{mhs+1}'] = {}
-        mainHeatingSystem['HeatingDataType'] = 'None'
-        mainHeatingSystem['Fraction'] = 0
-        mainHeatingSystem['PcdfIndex'] = 0
-        mainHeatingSystem['BoilerEfficiencyType'] = 'replace_xsi:nul'
-        mainHeatingSystem['EfficiencyWinter'] = 0
-        mainHeatingSystem['EfficiencySummer'] = 0
-        mainHeatingSystem['TestMethod'] = 'replace_xsi:nul'
-        mainHeatingSystem['MHSCtrlPcdfIndex'] = 'replace_xsi:nul'
-        mainHeatingSystem['CompensatorPcdfIndex'] = 'replace_xsi:nul'
-        mainHeatingSystem['HetasApprovedSystem'] = 'false'
-        mainHeatingSystem['FlueType'] = 'replace_xsi:nul'
-        mainHeatingSystem['FanAssistedFlue'] = 'false'
-        mainHeatingSystem['McsCertificate'] = 'false'
-        mainHeatingSystem['Pumped'] = 'replace_xsi:nul'
-        mainHeatingSystem['HeatingPumpAge'] = 'replace_xsi:nul'
-        mainHeatingSystem['OilPumpInside'] = 'false'
-        mainHeatingSystem['HeatEmitter'] = 'replace_xsi:nul'
-        mainHeatingSystem['UnderfloorHeating'] = 'replace_xsi:nul'
-        mainHeatingSystem['CombiType'] = 'replace_xsi:nul'
-        mainHeatingSystem['CombiKeepHotType'] = 'replace_xsi:nul'
-        mainHeatingSystem['CombiStoreType'] = 'replace_xsi:nul'
-        mainHeatingSystem['ElectricCPSUtemperature'] = 'replace_xsi:nul'
-        mainHeatingSystem['FIcase'] = 'replace_xsi:nul'
-        mainHeatingSystem['FIwater'] = 'replace_xsi:nul'
-        mainHeatingSystem['BurnerControl'] = 'replace_xsi:nul'
-        mainHeatingSystem['DelayedStartStat'] = 'false'
-        mainHeatingSystem['FlowTemperature'] = 'replace_xsi:nul'
-        mainHeatingSystem['BoilerInterlock'] = 'false'
-        mainHeatingSystem['StorageHeaters'] = {}
-        mainHeatingSystem['FlowTemperatureValue'] = 'replace_xsi:nul'
-        mainHeatingSystem['SapCode'] = 'replace_xsi:nul'
-        mainHeatingSystem['FuelType'] = 'replace_xsi:nul'
-        mainHeatingSystem['CtrlSapCode'] = 'replace_xsi:nul'
-    
-    # output data for the secondary heating systems. this is an empty item that Elmhurst requires as input
-    secondaryHeating = assessment['SecondaryHeating'] = {}
-    secondaryHeating['HeatingDataType'] = 'None'
-    secondaryHeating['TestMethod'] = 'replace_xsi:nul'
-    secondaryHeating['HetasApprovedSystems'] = 'false'
-    secondaryHeating['Efficiency'] = 'replace_xsi:nul'
-    secondaryHeating['SapCode'] = 0
-    secondaryHeating['FuelType'] = 'replace_xsi:nul'
-    
-    # output data for community heating
-    communityHeating = assessment['CommunityHeating'] = {}
-    communityHeating['Type'] = input_unit['Heating network type']
-    communityHeating['DistributionLossSpace'] = input_unit['Distribution loss space']
-    communityHeating['DistributionLossWater'] = 'replace_xsi:nul'
-    communityHeating['ChargingLinked'] = 'replace_xsi:nul'
-    heatSource = communityHeating['HeatSource'] = {}
+        main_heating_system = assessment[f'MainHeatingSystem{mhs+1}'] = {}
+        main_heating_system['HeatingDataType'] = 'None'
+        main_heating_system['Fraction'] = 0
+        main_heating_system['PcdfIndex'] = 0
+        main_heating_system['BoilerEfficiencyType'] = 'replace_xsi:nul'
+        main_heating_system['EfficiencyWinter'] = 0
+        main_heating_system['EfficiencySummer'] = 0
+        main_heating_system['TestMethod'] = 'replace_xsi:nul'
+        main_heating_system['MHSCtrlPcdfIndex'] = 'replace_xsi:nul'
+        main_heating_system['CompensatorPcdfIndex'] = 'replace_xsi:nul'
+        main_heating_system['HetasApprovedSystem'] = 'false'
+        main_heating_system['FlueType'] = 'replace_xsi:nul'
+        main_heating_system['FanAssistedFlue'] = 'false'
+        main_heating_system['McsCertificate'] = 'false'
+        main_heating_system['Pumped'] = 'replace_xsi:nul'
+        main_heating_system['HeatingPumpAge'] = 'replace_xsi:nul'
+        main_heating_system['OilPumpInside'] = 'false'
+        main_heating_system['HeatEmitter'] = 'replace_xsi:nul'
+        main_heating_system['UnderfloorHeating'] = 'replace_xsi:nul'
+        main_heating_system['CombiType'] = 'replace_xsi:nul'
+        main_heating_system['CombiKeepHotType'] = 'replace_xsi:nul'
+        main_heating_system['CombiStoreType'] = 'replace_xsi:nul'
+        main_heating_system['ElectricCPSUtemperature'] = 'replace_xsi:nul'
+        main_heating_system['FIcase'] = 'replace_xsi:nul'
+        main_heating_system['FIwater'] = 'replace_xsi:nul'
+        main_heating_system['BurnerControl'] = 'replace_xsi:nul'
+        main_heating_system['DelayedStartStat'] = 'false'
+        main_heating_system['FlowTemperature'] = 'replace_xsi:nul'
+        main_heating_system['BoilerInterlock'] = 'false'
+        main_heating_system['StorageHeaters'] = {}
+        main_heating_system['FlowTemperatureValue'] = 'replace_xsi:nul'
+        main_heating_system['SapCode'] = 'replace_xsi:nul'
+        main_heating_system['FuelType'] = 'replace_xsi:nul'
+        main_heating_system['CtrlSapCode'] = 'replace_xsi:nul'
+
+    # Output data for the secondary heating systems.
+    # This is an empty item that Elmhurst requires as input
+    secondary_heating = assessment['SecondaryHeating'] = {}
+    secondary_heating['HeatingDataType'] = 'None'
+    secondary_heating['TestMethod'] = 'replace_xsi:nul'
+    secondary_heating['HetasApprovedSystems'] = 'false'
+    secondary_heating['Efficiency'] = 'replace_xsi:nul'
+    secondary_heating['SapCode'] = 0
+    secondary_heating['FuelType'] = 'replace_xsi:nul'
+
+    # Output data for community heating
+    community_heating = assessment['CommunityHeating'] = {}
+    community_heating['Type'] = input_unit['Heating network type']
+    community_heating['DistributionLossSpace'] = input_unit['Distribution loss space']
+    community_heating['DistributionLossWater'] = 'replace_xsi:nul'
+    community_heating['ChargingLinked'] = 'replace_xsi:nul'
+    heat_source = community_heating['HeatSource'] = {}
     # Elmhurst expects 5 heat sources as input
     for chs in range(5):
-        commHeatSource = heatSource[f'CommunityHeatSource{chs+1}'] = {}
-        #only inputting into the first heat source, the rest is kept empty
+        comm_heat_source = heat_source[f'CommunityHeatSource{chs+1}'] = {}
+        # Only inputting into the first heat source, the rest is kept empty
         if chs == 0:
-            commHeatSource['Source'] = input_unit['Heating source 1 - source']
-            commHeatSource['Fraction'] = input_unit['Percentage of heat']
-            commHeatSource['FuelType'] = input_unit['Fuel type']
-            commHeatSource['OveralEfficiency'] = input_unit['Overall efficiency']
-            commHeatSource['HeatPowerRatio'] = 'replace_xsi:nul'
-            commHeatSource['ElectricalEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatingUse'] = input_unit['Heating use']
-            commHeatSource['CHPFuelFactor'] = 'replace_xsi:nul'
-            commHeatSource['EfficiencyType'] = 'replace_xsi:nul'
+            comm_heat_source['Source'] = input_unit['Heating source 1 - source']
+            comm_heat_source['Fraction'] = input_unit['Percentage of heat']
+            comm_heat_source['FuelType'] = input_unit['Fuel type']
+            comm_heat_source['OveralEfficiency'] = input_unit['Overall efficiency']
+            comm_heat_source['HeatPowerRatio'] = 'replace_xsi:nul'
+            comm_heat_source['ElectricalEfficiency'] = 'replace_xsi:nul'
+            comm_heat_source['HeatEfficiency'] = 'replace_xsi:nul'
+            comm_heat_source['HeatingUse'] = input_unit['Heating use']
+            comm_heat_source['CHPFuelFactor'] = 'replace_xsi:nul'
+            comm_heat_source['EfficiencyType'] = 'replace_xsi:nul'
         else:
-            commHeatSource['Source'] = 'None'
-            commHeatSource['Fraction'] = 'replace_xsi:nul'
-            commHeatSource['FuelType'] = 'replace_xsi:nul'
-            commHeatSource['OveralEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatPowerRatio'] = 'replace_xsi:nul'
-            commHeatSource['ElectricalEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatEfficiency'] = 'replace_xsi:nul'
-            commHeatSource['HeatingUse'] = input_unit['Heating use']
-            commHeatSource['CHPFuelFactor'] = 'replace_xsi:nul'
-            commHeatSource['EfficiencyType'] = 'replace_xsi:nul'
-            
-    communityHeating['DistributionLossSpaceValue'] = input_unit['Distribution loss']
-    communityHeating['DistributionLossWaterValue'] = 'replace_xsi:nul'
-    communityHeating['SpacePCDFIndex'] = 'replace_xsi:nul'
-    communityHeating['WaterPCDFIndex'] = 'replace_xsi:nul'
-    communityHeating['CtrlSapCode'] = int(input_unit['Heating controls'])
-    communityHeating['ExistingSpace'] = 'replace_xsi:nul'
-    communityHeating['ExistingWater'] = 'replace_xsi:nul'
-    communityHeating['UseNotionalSpace'] = 'replace_xsi:nul'
-    communityHeating['UseNotionalWater'] = 'replace_xsi:nul'
-    
-    # output data for water heating systems DHW
-    waterHeatingSystem = assessment['WaterHeatingSystem'] = {}
-    waterHeatingSystem['WaterHeatingType'] = input_unit['Water heating']
-    waterHeatingSystem['LowWaterUse'] = 'false'
-    waterHeatingSystem['ImmersionHeaterType'] = 'replace_xsi:nul'
-    waterHeatingSystem['SummerImmersion'] = 'false'
-    waterHeatingSystem['SuplementaryImmersion'] = 'false'
-    waterHeatingSystem['ImmersionOnlyHeatingHotWater'] = 'false'
-    waterHeatingSystem['ThermalStore'] = 'None'
-    waterHeatingSystem['ThermalStorePipework'] = 'replace_xsi:nul'
-    waterHeatingSystem['HotWaterCylinder'] = input_unit['Storage type']
-    waterHeatingSystem['InsulationType'] = 'replace_xsi:nul'
-    waterHeatingSystem['InsulationThickness'] = 'replace_xsi:nul'
-    waterHeatingSystem['InsulationThicknessType'] = 'replace_xsi:nul'
-    waterHeatingSystem['Volume'] = 'replace_xsi:nul'
-    waterHeatingSystem['CylinderStat'] = 'false'
-    waterHeatingSystem['PipeworkInsulation'] = 'replace_xsi:nul'
-    waterHeatingSystem['InHeatedSpace'] = 'false'
-    waterHeatingSystem['InAiringCupboard'] = 'false'
-    waterHeatingSystem['SeparateTimeControl'] = 0
-    waterHeatingSystem['LossFactor'] = 1.46
-    waterHeatingSystem['SolarPanelType'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarAreaType'] = 'Aperture'
-    waterHeatingSystem['SolarArea'] = 0
-    waterHeatingSystem['SolarNi'] = 0
-    waterHeatingSystem['SolarA1'] = 0
-    waterHeatingSystem['SolarA2'] = 0
-    waterHeatingSystem['SolarAGRatio'] = 0
-    waterHeatingSystem['SolarLoopEfficiency'] = 0.9
-    waterHeatingSystem['SolarKhem'] = 0
-    waterHeatingSystem['SolarHeatLossCoeff'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarIsFromCommunity'] = 'false'
-    waterHeatingSystem['SolarServiceProvision'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarPanelOrientation'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarElevation'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarOvershadingType'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarVolume'] = 'replace_xsi:nul'
-    waterHeatingSystem['SolarPumpElectricallyPowered'] = 'false'
-    waterHeatingSystem['SolarCombinedCylinder'] = 'false'
-    waterHeatingSystem['ColdWaterSource'] = input_unit['Cold water source']
-    waterHeatingSystem['BathCount'] = int(input_unit['Bath count'])
-    waterHeatingSystem['WWHRSBathCount'] = 'replace_xsi:nul'
-    waterHeatingSystem['SapCode'] = 901
-    waterHeatingSystem['FuelType'] = 'replace_xsi:nul'
-    waterHeatingSystem['HIUPcdfIndex'] = 'replace_xsi:nul'
-    
-    # output data for showers (only one shower item is exported)
+            comm_heat_source['Source'] = 'None'
+            comm_heat_source['Fraction'] = 'replace_xsi:nul'
+            comm_heat_source['FuelType'] = 'replace_xsi:nul'
+            comm_heat_source['OveralEfficiency'] = 'replace_xsi:nul'
+            comm_heat_source['HeatPowerRatio'] = 'replace_xsi:nul'
+            comm_heat_source['ElectricalEfficiency'] = 'replace_xsi:nul'
+            comm_heat_source['HeatEfficiency'] = 'replace_xsi:nul'
+            comm_heat_source['HeatingUse'] = input_unit['Heating use']
+            comm_heat_source['CHPFuelFactor'] = 'replace_xsi:nul'
+            comm_heat_source['EfficiencyType'] = 'replace_xsi:nul'
+
+    community_heating['DistributionLossSpaceValue'] = input_unit['Distribution loss']
+    community_heating['DistributionLossWaterValue'] = 'replace_xsi:nul'
+    community_heating['SpacePCDFIndex'] = 'replace_xsi:nul'
+    community_heating['WaterPCDFIndex'] = 'replace_xsi:nul'
+    community_heating['CtrlSapCode'] = int(input_unit['Heating controls'])
+    community_heating['ExistingSpace'] = 'replace_xsi:nul'
+    community_heating['ExistingWater'] = 'replace_xsi:nul'
+    community_heating['UseNotionalSpace'] = 'replace_xsi:nul'
+    community_heating['UseNotionalWater'] = 'replace_xsi:nul'
+
+    # Output data for water heating systems DHW
+    water_heating_system = assessment['WaterHeatingSystem'] = {}
+    water_heating_system['WaterHeatingType'] = input_unit['Water heating']
+    water_heating_system['LowWaterUse'] = 'false'
+    water_heating_system['ImmersionHeaterType'] = 'replace_xsi:nul'
+    water_heating_system['SummerImmersion'] = 'false'
+    water_heating_system['SuplementaryImmersion'] = 'false'
+    water_heating_system['ImmersionOnlyHeatingHotWater'] = 'false'
+    water_heating_system['ThermalStore'] = 'None'
+    water_heating_system['ThermalStorePipework'] = 'replace_xsi:nul'
+    water_heating_system['HotWaterCylinder'] = input_unit['Storage type']
+    water_heating_system['InsulationType'] = 'replace_xsi:nul'
+    water_heating_system['InsulationThickness'] = 'replace_xsi:nul'
+    water_heating_system['InsulationThicknessType'] = 'replace_xsi:nul'
+    water_heating_system['Volume'] = 'replace_xsi:nul'
+    water_heating_system['CylinderStat'] = 'false'
+    water_heating_system['PipeworkInsulation'] = 'replace_xsi:nul'
+    water_heating_system['InHeatedSpace'] = 'false'
+    water_heating_system['InAiringCupboard'] = 'false'
+    water_heating_system['SeparateTimeControl'] = 0
+    water_heating_system['LossFactor'] = 1.46
+    water_heating_system['SolarPanelType'] = 'replace_xsi:nul'
+    water_heating_system['SolarAreaType'] = 'Aperture'
+    water_heating_system['SolarArea'] = 0
+    water_heating_system['SolarNi'] = 0
+    water_heating_system['SolarA1'] = 0
+    water_heating_system['SolarA2'] = 0
+    water_heating_system['SolarAGRatio'] = 0
+    water_heating_system['SolarLoopEfficiency'] = 0.9
+    water_heating_system['SolarKhem'] = 0
+    water_heating_system['SolarHeatLossCoeff'] = 'replace_xsi:nul'
+    water_heating_system['SolarIsFromCommunity'] = 'false'
+    water_heating_system['SolarServiceProvision'] = 'replace_xsi:nul'
+    water_heating_system['SolarPanelOrientation'] = 'replace_xsi:nul'
+    water_heating_system['SolarElevation'] = 'replace_xsi:nul'
+    water_heating_system['SolarOvershadingType'] = 'replace_xsi:nul'
+    water_heating_system['SolarVolume'] = 'replace_xsi:nul'
+    water_heating_system['SolarPumpElectricallyPowered'] = 'false'
+    water_heating_system['SolarCombinedCylinder'] = 'false'
+    water_heating_system['ColdWaterSource'] = input_unit['Cold water source']
+    water_heating_system['BathCount'] = int(input_unit['Bath count'])
+    water_heating_system['WWHRSBathCount'] = 'replace_xsi:nul'
+    water_heating_system['SapCode'] = 901
+    water_heating_system['FuelType'] = 'replace_xsi:nul'
+    water_heating_system['HIUPcdfIndex'] = 'replace_xsi:nul'
+
+    # Output data for showers (only one shower item is exported)
     showers = assessment['Showers'] = {}
     shower = showers['Shower'] = {}
     shower['Description'] = 'Shower1'
@@ -699,8 +830,9 @@ def match_xml(input_unit):
     shower['RatedPower'] = round(1.1625 * input_unit['Shower flowrate'],1)
     shower['Connected'] = 'true'
     shower['ConnectedTo'] = 'Storage'
-    
-    # misc objects that need to be included in the XML for Elmhurst (but currently are not allowed to be entered in the excel sheet)
+
+    # Misc objects that need to be included in the XML for Elmhurst
+    # (but currently are not allowed to be entered in the excel sheet)
     assessment['WindTurbineType'] = 'None'
     assessment['WindTurbines'] = []
     assessment['ApportionedEnergy'] = 'replace_xsi:nul'
@@ -743,26 +875,37 @@ def match_xml(input_unit):
 
     return output_data
 
-def findAndReplace(file_path, value = 'replace_xsi:nul'):
-    with open(file_path, 'r') as file:
+def find_and_replace(file_path, value = 'replace_xsi:nul'):
+    """Writes XML Data Out"""
+    with open(file_path, 'r', encoding="utf-8") as file:
         xml_data = file.read()
         root = ET.fromstring(xml_data)
-        #add root attributes
+        # Add root attributes
         root.set("xmlns:xsd", "http://www.w3.org/2001/XMLSchema")
         root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-        #traverse XML and check if values match the flag string. If they do, remove it and add string as tag attribute
+        # Traverse XML and check if values match the flag string. 
+        # If they do, remove it and add string as tag attribute
         def traverse(element):
             if element.text == value:
                 old_tag = element.tag
-                element.tag = '{} xsi:nil="true"'.format(old_tag)
+                element.tag = f'{old_tag} xsi:nil="true"'
                 element.text = ''
-            #check for integers in tags and remove them
+            # Check for integers in tags and remove them
             text = str(element.tag)
             for test_text in ['Measurement']:
                 for i in range(10):
                     if text == test_text+str(i):
                         element.tag = test_text
-            for test_text in ['ExternalWall','PartyWall','ExternalRoof','HeatLossFloor','Floor','Roof','OpeningType','Opening']:
+            for test_text in [
+                    'ExternalWall',
+                    'PartyWall',
+                    'ExternalRoof',
+                    'HeatLossFloor',
+                    'Floor',
+                    'Roof',
+                    'OpeningType',
+                    'Opening'
+                ]:
                 for i in range(20):
                     if text == test_text+str(i):
                         element.tag = test_text
@@ -770,12 +913,13 @@ def findAndReplace(file_path, value = 'replace_xsi:nul'):
                 for i in range(5):
                     if text == test_text+str(i+1):
                         element.tag = test_text
-            check_tb = ['ThermalBridgesCalculation','ThermalBridgesYvalue']
+            # check_tb = ['ThermalBridgesCalculation','ThermalBridgesYvalue']
             if 'ThermalBridge-' in text:
                 element.tag = 'ThermalBridge'
             for child in element:
                 traverse(child)
         traverse(root)
         updated_xml_data = ET.tostring(root, encoding='utf-8', method='xml').decode()
-    with open(file_path, 'w') as file:
+
+    with open(file_path, 'w', encoding="utf-8") as file:
         file.write(updated_xml_data)
