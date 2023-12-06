@@ -6,8 +6,18 @@ import base64
 import datetime
 
 def main():
-    st.title("Upload File and Generate XML")
-
+    st.title("SAP XML Generator")
+    st.header('Download the standard Excel Calc Sheet', divider='rainbow')
+    
+    standard_calc_sheet = 'CALC-XX-XX-SAP CALC TEMPLATE.xlsx'
+    if st.button('Download Excel File'):
+        with open(standard_calc_sheet, 'rb') as file:
+            file_content = file.read()
+            bin_str = base64.b64encode(file_content).decode()
+        st.markdown(f'<a href="data:application/octet-stream;base64,{bin_str}" download="{standard_calc_sheet}">Download standard Excel Calc Sheet</a>', unsafe_allow_html=True)
+    
+    st.header('Generate the XMLs by uploading your completed Calc Sheet below', divider='rainbow')
+    
     # File upload widget
     uploaded_file = st.file_uploader("Choose a Calc Sheet file", type=["xlsx"])
 
