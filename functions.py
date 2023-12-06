@@ -585,7 +585,7 @@ def match_xml(input_unit):
         assessment['PhotovoltaicUnitType'] = input_unit['PV type']
         pvs = assessment['PhotovoltaicUnits'] = {}
         pv = pvs['PhotovoltaicUnit'] = {}
-        pv['CellsPeak'] = input_unit['Cells peak']
+        pv['CellsPeak'] = input_unit['Cells kW peak']
         pv['Orientation'] = input_unit['PV orientation']
         pv['Elevation'] = input_unit['PV elevation']
         pv['Overshading'] = input_unit['PV overshading']
