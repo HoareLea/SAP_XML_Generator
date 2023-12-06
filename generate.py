@@ -3,7 +3,8 @@
 import warnings
 import pandas as pd
 import os
-from functions import input_reader, match_xml, data_to_xml, prettify, find_and_replace, ErrorFound, generate_unique_name, delete_files_in_directory
+import streamlit as st
+from functions import input_reader, match_xml, data_to_xml, prettify, find_and_replace, generate_unique_name, delete_files_in_directory
 
 warnings.simplefilter(action='ignore', category=UserWarning)
 
@@ -18,7 +19,7 @@ class SAP:
             self.writer()
             self.remove_temp_files()
         else:
-            raise ErrorFound('No output data')
+            raise st.error('No output data')
 
     def writer(self):
         """Writes out the xml data to a file"""
@@ -35,7 +36,7 @@ class SAP:
                 f.write(prettify(xml_string))
                 self.xml_out = find_and_replace(file_path)
             except Exception as exc:
-                raise ErrorFound('Invalid XML structure') from exc
+                raise st.error('Invalid XML structure') from exc
         pass
 
     def remove_temp_files(self):

@@ -26,11 +26,6 @@ def main():
                     xml_bytes = xml_output.encode('utf-8')
                     zip_file.writestr(f'{names[i]}.xml', xml_bytes)
            
-            # Download the zip file with the custom name
-            # st.markdown(
-            #     f"### Download Generated XML Files\n[Click here to download]({base64.b64encode(zip_buffer.getvalue()).decode()}, {zip_filename})"
-            # )
-
             st.markdown(
                 f'<a href="data:application/zip;base64,{base64.b64encode(zip_buffer.getvalue()).decode()}" download="{zip_filename}">Download {zip_filename}</a>',
                 unsafe_allow_html=True

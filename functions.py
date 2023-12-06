@@ -9,10 +9,7 @@ from levels_naming import levels_naming
 import uuid
 import datetime
 import os
-
-class ErrorFound(Exception):
-    """Basic Class to raise exception"""
-    pass
+import streamlit as st
 
 def generate_unique_name(base_name):
     """Generate a unique name for the temp XML files to be saved locally"""
@@ -69,7 +66,7 @@ def check_missing_data(unit, sheet, input_list):
     for info in input_list:
         non_nan = sheet[info][sheet[info].notna()]
         if len(non_nan)==0:
-            raise ErrorFound(f'Error for {unit["propertyName"]}: "{info}" has not been entered')
+            raise st.error(f'Error for {unit["propertyName"]}: "{info}" has not been entered')
         unit[info] = sheet[info].tolist()[1]
 
 def check_opening_type_data(unit, sheet, main, inputs, this_type):
@@ -79,7 +76,7 @@ def check_opening_type_data(unit, sheet, main, inputs, this_type):
     for data in inputs:
         filtered_input = sheet[data][sheet[data].notna()]
         if len(filtered_input)!=len(filtered_main):
-            raise ErrorFound(f'''Error for {unit["propertyName"]}:
+            raise st.error(f'''Error for {unit["propertyName"]}:
                              There is a mismatch between the number of "{main}" 
                              elements and the corresponding "{data}"''')
 
@@ -89,14 +86,25 @@ def check_openings_data(unit, sheet, main, inputs):
     for data in inputs:
         filtered_input = sheet[data][sheet[data].notna()]
         if len(filtered_input)!=len(filtered_main):
-            raise ErrorFound(f'''Error for {unit["propertyName"]}:
+            raise st.error(f'''Error for {unit["propertyName"]}:
                              There is a mismatch between the number of "{main}" 
                              elements and the corresponding "{data}"''')
 
-def check_op_element_names(unit, sheet):
-    """Checks Element Names to ensure each is unique"""
-    if len(set(sheet['Element name'])) != len(sheet['Element name']):
-        raise ErrorFound(f'''Error for {unit["propertyName"]}:
+def check_op_element_types_names(unit, sheet):
+    """Checks if there is an inconsitant number of Element Types and Names. Also, checks Element Names to ensure each is unique"""
+    filtered_op_elem_type = sheet['Element type'][sheet['Element type'].notna()]
+    filtered_op_elem_name = sheet['Element name'][sheet['Element name'].notna()]
+    
+    # Check if all element types have a name assigned 
+    if len(filtered_op_elem_type)!=len(filtered_op_elem_name):
+        raise st.error(f'''Error for {unit["propertyName"]}:
+                         There is a mismatch between the number of
+                         "Element type" entries and the assigned "Element name"''')
+    # Check if there are non-unique element names
+    if len(set(filtered_op_elem_name)) != len(filtered_op_elem_name):
+        print(set(sheet['Element name']))
+        print(sheet['Element name'])
+        raise st.error(f'''Error for {unit["propertyName"]}:
                          Two or more opaque element entries have the same name. 
                          All elements require a unique name.''')
 
@@ -155,16 +163,8 @@ def input_reader(sheet):
     unit['partyCeilingArea'] = sheet['Party ceiling area'].tolist()[1:]
     unit['partyFloorArea'] = sheet['Party floor area'].tolist()[1:]
 
-    # Check if all element types have a name assigned
-    filtered_op_elem_type = sheet['Element type'][sheet['Element type'].notna()]
-    filtered_op_elem_name = sheet['Element name'][sheet['Element name'].notna()]
-    if len(filtered_op_elem_type)!=len(filtered_op_elem_name):
-        raise ErrorFound(f'''Error for {unit["propertyName"]}:
-                         There is a mismatch between the number of
-                         "Element type" entries and the assigned "Element name"''')
-
-    # Check if opaque elements have unique names assigned
-    check_op_element_names(unit, sheet)
+    # Check inconsistencies in opaque elements inputs
+    check_op_element_types_names(unit, sheet)
 
     # Checking if number of area inputs matches the number of entries of element type
     op_elements = [
@@ -177,9 +177,9 @@ def input_reader(sheet):
         'Party floor'
     ]
     op_elements_titles = [
-        'External wall length',
-        'Sheltered wall length',
-        'Party wall length',
+        'External wall area',
+        'Sheltered wall area',
+        'Party wall area',
         'External roof area',
         'Heat loss floor area',
         'Party ceiling area',
@@ -188,9 +188,8 @@ def input_reader(sheet):
     for this_id, element in enumerate(op_elements):
         filtered_elements = sheet['Element type'][sheet['Element type'] == element]
         if len(filtered_elements) != len(sheet[op_elements_titles[this_id]][sheet[op_elements_titles[this_id]].notna()]):
-            raise ErrorFound(f'''Error for {unit["propertyName"]}:
-                             There is a mismatch between the number of
-                             "{element}" entries and their corresponding properties''')
+            raise st.error(f'''Error for {unit["propertyName"]}:
+                             An "{element}" element is missing 1 or more required inputs''')
 
     # Opening types
     unit['openTypeName'] = sheet['Opening type name'].tolist()[1:]
@@ -233,7 +232,7 @@ def input_reader(sheet):
     for tb, _ in TBs.items():
         thermal_bridge = {}
         if sheet[tb][0] == 'ERROR':
-            raise ErrorFound(f'Error for {unit["propertyName"]}: Psi value not entered for thermal bridge {tb}')
+            raise st.error(f'Error for {unit["propertyName"]}: Psi value not entered for thermal bridge {tb}')
         thermal_bridge['psi'] = sheet[tb][sheet[tb].notna()].tolist()[0]
         thermal_bridge['lengths']  = sheet[tb][2:][sheet[tb].notna()].tolist()
         thermal_bridges[tb] = thermal_bridge
@@ -293,7 +292,7 @@ def input_reader(sheet):
     PV_list = [
         'PV present?',
         'PV type',
-        'Cells peak',
+        'Cells kW peak',
         'PV orientation',
         'PV elevation',
         'PV overshading'
@@ -345,7 +344,7 @@ def match_xml(input_unit):
     if len(filtered_heat_loss_perim) == len(filtered_heated_int_area) == len(filtered_floor_to_slab):
         pass
     else:
-        raise ErrorFound(f'''Error for {input_unit["propertyName"]}: 
+        raise st.error(f'''Error for {input_unit["propertyName"]}: 
                         One or multiple inputs among ["Floor to slab", "Heat loss perimeter", 
                         "Heated internal area"] have not been entered''')
 
@@ -413,8 +412,8 @@ def match_xml(input_unit):
     for this_id, this_type in enumerate(input_unit['opaqElementType']):
         row = op_elements_df.loc[this_id]
         if this_type == 'External wall':
-            filtered_row = row[:2][row[:2].notna()]
-            if len(filtered_row)==2:
+            filtered_row = row[1:3][row[1:3].notna()]
+            if len(filtered_row)>1:
                 ext_wall = {}
                 ext_wall['Description'] = input_unit['opaqElementName'][this_id]
                 ext_wall['Construction'] = 'Other'
@@ -429,10 +428,10 @@ def match_xml(input_unit):
                 ext_wall['NettArea'] = 0
                 ext_walls[f'ExternalWall{this_id}'] = ext_wall
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: An "External wall" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: An "External wall" element is missing 1 or more required inputs')
         elif this_type == 'Sheltered wall':
             filtered_row = row[2:6][row[2:6].notna()]
-            if len(filtered_row)==3:
+            if len(filtered_row)>2:
                 shelt_wall = {}
                 shelt_wall['Description'] = input_unit['opaqElementName'][this_id]
                 shelt_wall['Construction'] = 'Other'
@@ -447,7 +446,7 @@ def match_xml(input_unit):
                 shelt_wall['NettArea'] = 0
                 ext_walls[f'ExternalWall{this_id}'] = shelt_wall
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Sheltered wall" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: A "Sheltered wall" element is missing 1 or more required inputs')
         elif this_type == 'Party wall':
             if row.iloc[6]>0:
                 party_wall = {}
@@ -461,18 +460,17 @@ def match_xml(input_unit):
                 party_wall['Type'] = 'FilledWithEdge'
                 party_walls[f'PartyWall{this_id}'] = party_wall
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party wall" has been entered without corresponding properties')
-
-
+                raise st.error(f'Error for {input_unit["propertyName"]}: A "Party wall" element is missing 1 or more required inputs')
         elif this_type == 'External roof':
             filtered_row = row[7:11][row[7:11].notna()]
+            print(filtered_row)
             if len(filtered_row)==4:
                 ext_roof = {}
                 ext_roof['Description'] = input_unit['opaqElementName'][this_id]
                 try:
                     ext_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
                 except Exception as exc:
-                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                    raise st.error(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 ext_roof['Construction'] = 'Other'
                 ext_roof['Kappa'] = 0
                 ext_roof['GrossArea'] = input_unit['externalRoofArea'][this_id]
@@ -485,7 +483,7 @@ def match_xml(input_unit):
                 ext_roof['NettArea'] = 0
                 ext_roofs[f'ExternalRoof{this_id}'] = ext_roof
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: An "External roof" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: An "External roof" element is missing 1 or more required inputs')
         elif this_type == 'Heat loss floor':
             filtered_row = row[11:15][row[11:15].notna()]
             if len(filtered_row)==4:
@@ -497,14 +495,14 @@ def match_xml(input_unit):
                 try:
                     heatloss_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
                 except Exception as exc:
-                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                    raise st.error(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 heatloss_floor['Type'] = input_unit['heatLossFloorType'][this_id]
                 heatloss_floor['UValue'] = input_unit['heatLossFloorUvalue'][this_id]
                 heatloss_floor['ShelterFactor'] = input_unit['heatLossFloorShelterFactor'][this_id]
                 heatloss_floor['ShelterCode'] = None
                 heatloss_floors[f'HeatLossFloor{this_id}'] = heatloss_floor
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Heat loss floor" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: A "Heat loss floor" element is missing 1 or more required inputs')
         elif this_type == 'Party ceiling':
             if row.iloc[15]>0:
                 party_roof = {}
@@ -512,13 +510,13 @@ def match_xml(input_unit):
                 try:
                     party_roof['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
                 except Exception as exc:
-                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                    raise st.error(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 party_roof['Construction'] = 'Other'
                 party_roof['Kappa'] = 0
                 party_roof['GrossArea'] = input_unit['partyCeilingArea'][this_id]
                 party_roofs[f'Roof{this_id}'] = party_roof
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party ceiling" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: A "Party ceiling" element is missing 1 or more required inputs')
         elif this_type == 'Party floor':
             if row.iloc[16]>0:
                 party_floor = {}
@@ -529,10 +527,10 @@ def match_xml(input_unit):
                 try:
                     party_floor['StoreyIndex'] = levels_naming[str(int(input_unit['opaqElementLevel'][this_id]-1))]
                 except Exception as exc:
-                    raise ErrorFound(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
+                    raise st.error(f'The level reference entered for {this_type} is not listed under "Levels"') from exc
                 party_floors[f'Floor{this_id}'] = party_floor
             else:
-                raise ErrorFound(f'Error for {input_unit["propertyName"]}: A "Party floor" has been entered without corresponding properties')
+                raise st.error(f'Error for {input_unit["propertyName"]}: A "Party floor" element is missing 1 or more required inputs')
     # Misc objects that need to be included in the XML for Elmhurst
     # (but currently are not allowed to be entered in the excel sheet)
     assessment['ThermalBridgesCalculation'] = 'CalculateBridges'
@@ -635,7 +633,7 @@ def match_xml(input_unit):
             try:
                 levels_naming[str(int(input_unit['openLevel'][this_id]-1))]
             except Exception as exc:
-                raise ErrorFound(f'The level reference entered for opening "{name}" is not listed under "Levels"') from exc
+                raise st.error(f'The level reference entered for opening "{name}" is not listed under "Levels"') from exc
 
             opening = {}
             opening['this_id'] = this_id
@@ -655,7 +653,7 @@ def match_xml(input_unit):
                     opening['LocationWallIndex'] = this_ido
                     counter+=1
             if counter == 0:
-                raise ErrorFound(f'''The parent element "{input_unit["parentElem"][this_id]}" 
+                raise st.error(f'''The parent element "{input_unit["parentElem"][this_id]}" 
                                 referred by the "{name}" opening element does not exist 
                                 or it is not an External or Sheltered wall''')
             opening['LocationRoofIndex'] = 'replace_xsi:nul'
